@@ -91,6 +91,21 @@ namespace SqlAssist.Core.Tests
         }
 
         [Fact]
+        public void ThreePartTableNameKeepsItsDatabase() =>
+            Assert.Equal("OtherDb", Target("SELECT * FROM OtherDb.dbo.Ord|ers o").Table.Database);
+
+        [Fact]
+        public void TwoPartTableNameHasNoDatabase() => Assert.Null(Target("SELECT * FROM dbo.Ord|ers o").Table.Database);
+
+        [Fact]
+        public void ThreePartRoutineKeepsItsDatabase()
+        {
+            var h = Target("EXEC OtherDb.dbo.usp_|X");
+            Assert.Equal("OtherDb", h.Database);
+            Assert.Equal("dbo", h.Schema);
+        }
+
+        [Fact]
         public void ExecWithReturnValue() => Assert.Equal("usp_X", Target("EXEC @rc = usp_|X").Name);
 
         [Fact]

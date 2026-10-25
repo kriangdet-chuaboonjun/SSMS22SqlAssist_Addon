@@ -74,7 +74,7 @@ add-on ขนาดเล็กสำหรับ SQL Server Management Studio 2
 | Space, `,`, `(` ฯลฯ | ปิดรายการแนะนำโดย **ไม่** เลือกอะไร |
 | Ctrl+Space | เปิดรายการแนะนำเอง |
 | Ctrl+Shift+R | โหลด schema ใหม่ (หรือใช้ Tools › SqlAssist › Refresh Schema Cache) |
-| F12 | ไปที่ definition ของชื่อที่ caret อยู่ (หรือคลิกขวา › Go To Definition): ตารางจะเปิดใน Object Explorer ส่วน view / procedure / function / trigger จะเปิด script (`CREATE ...` ตามที่ SQL Server เก็บไว้) ในหน้าต่าง query ใหม่ ไม่รันให้ ถ้าไม่ใช่ชื่อ object (keyword, ตัวแปร, คอลัมน์, CTE) จะไม่ทำอะไร |
+| F12 | ไปที่ definition ของชื่อที่ caret อยู่ (หรือคลิกขวา › Go To Definition): ตารางจะเปิดใน Object Explorer ส่วน view / procedure / function จะเปิด script (`CREATE ...` ตามที่ SQL Server เก็บไว้) ในหน้าต่าง query ใหม่ ไม่รันให้ ใช้ได้เฉพาะ object ที่อยู่ใน schema ที่ SqlAssist โหลดไว้แล้ว (ตาราง, view, procedure, function ของ database นี้) ถ้าเป็นอย่างอื่น เช่น keyword, ตัวแปร, คอลัมน์, CTE, function ในตัว, `#temp`, ชื่อที่ระบุ database อื่น (`OtherDb.dbo.T`) หรือ schema ยังโหลดไม่เสร็จ จะส่งต่อให้ SSMS ตามปกติ |
 | Ctrl+K, Ctrl+Shift+F | จัดรูปแบบ SQL ที่เลือก (หรือทั้งหน้า query) ดูหัวข้อ Format SQL |
 
 | Ctrl+J แล้ว I / T / W / O / U | (ใน results grid) copy script ของ cell ที่เลือกเป็น INSERT / INSERT #tmpTable / WHERE IN() / WHERE AND OR / UPDATE (UPDATE เปิดหน้าต่างเลือกตารางและ Key ก่อน) ดูหัวข้อ Generate Script As ด้านล่าง |

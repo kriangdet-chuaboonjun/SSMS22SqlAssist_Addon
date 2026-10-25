@@ -24,7 +24,7 @@ namespace SqlAssist.Search
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(token);
             try
             {
-                var navType = FindAssembly("SqlWorkbench.Interfaces")?.GetType("Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer.SObjectExplorerNavigationService");
+                var navType = NavigationServiceType();
                 object nav = navType == null ? null : await AsyncServiceProvider.GlobalProvider.GetServiceAsync(navType);
                 if (nav == null) return Fail("Object Explorer navigation service not available in this SSMS build");
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(token);
@@ -180,6 +180,13 @@ namespace SqlAssist.Search
             try { return target?.GetType().GetProperty(property, Any)?.GetValue(target); }
             catch { return null; }
         }
+
+        /// <summary>Whether this SSMS build has the Object Explorer navigation <see cref="LocateAsync"/> relies on, so a
+        /// caller can hand the job to SSMS instead when it is gone.</summary>
+        public static bool CanLocate() => NavigationServiceType() != null;
+
+        private static Type NavigationServiceType() =>
+            FindAssembly("SqlWorkbench.Interfaces")?.GetType("Microsoft.SqlServer.Management.UI.VSIntegration.ObjectExplorer.SObjectExplorerNavigationService");
 
         private static Assembly FindAssembly(string name) =>
             AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => string.Equals(a.GetName().Name, name, StringComparison.OrdinalIgnoreCase));

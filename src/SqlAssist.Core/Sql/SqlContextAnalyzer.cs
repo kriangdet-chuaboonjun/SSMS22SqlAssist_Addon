@@ -7,6 +7,8 @@ namespace SqlAssist.Core.Sql
     /// <summary>A table (or view, function, derived table) named in a FROM / JOIN / UPDATE / INTO.</summary>
     public sealed class TableRef
     {
+        /// <summary>The database part of a three- or four-part name ("OtherDb" in OtherDb.dbo.Orders); null otherwise.</summary>
+        public string Database { get; set; }
         public string Schema { get; set; }
         public string Name { get; set; }
         public string Alias { get; set; }
@@ -105,7 +107,8 @@ namespace SqlAssist.Core.Sql
         public string Column { get; internal set; }
         /// <summary>For an unqualified Column: the tables it could belong to.</summary>
         public IReadOnlyList<TableRef> Scope { get; internal set; }
-        /// <summary>For Routine: the name as written (schema may be null).</summary>
+        /// <summary>For Routine: the name as written (database and schema may be null).</summary>
+        public string Database { get; internal set; }
         public string Schema { get; internal set; }
         public string Name { get; internal set; }
         public int Start { get; internal set; }
@@ -281,6 +284,7 @@ namespace SqlAssist.Core.Sql
                     Kind = HoverKind.Routine,
                     Name = sig[last].Value,
                     Schema = last - first >= 2 ? sig[last - 2].Value : null,
+                    Database = last - first >= 4 ? sig[last - 4].Value : null,
                     Start = sig[first].Start,
                     End = sig[last].End,
                 };
@@ -696,6 +700,7 @@ namespace SqlAssist.Core.Sql
                     }
                     r.Name = parts[parts.Count - 1];
                     if (parts.Count >= 2) r.Schema = parts[parts.Count - 2];
+                    if (parts.Count >= 3) r.Database = parts[parts.Count - 3];
                     r.NameStart = Sig[k].Start;
                     r.NameEnd = Sig[j - 1].End;
                     if (allowFunction && j < Sig.Count && Sig[j].IsSymbol('('))
