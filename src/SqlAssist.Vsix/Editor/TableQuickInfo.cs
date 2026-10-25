@@ -120,17 +120,11 @@ namespace SqlAssist.Editor
             }
         }
 
-        /// <summary>The column's text as in the completion list. An unqualified name is shown only when exactly one table in
-        /// scope has it: picking one of several would describe a column the query may not mean.</summary>
+        /// <summary>The column's text as in the completion list, only when its table is certain (see <see cref="ColumnInfo.FindOwner"/>).</summary>
         private static string DescribeColumn(SchemaModel schema, HoverTarget hover)
         {
-            var owners = (hover.Table != null ? new[] { hover.Table } : hover.Scope)
-                .Select(schema.Find)
-                .Where(o => o != null)
-                .Select(o => (o, c: o.Columns.FirstOrDefault(c => string.Equals(c.Name, hover.Column, StringComparison.OrdinalIgnoreCase))))
-                .Where(x => x.c != null)
-                .ToList();
-            return owners.Count == 1 ? ColumnInfo.Describe(schema, owners[0].o, owners[0].c) : null;
+            var found = ColumnInfo.FindOwner(schema, hover.Table, hover.Scope, hover.Column);
+            return found == null ? null : ColumnInfo.Describe(schema, found.Value.owner, found.Value.column);
         }
 
         public void Dispose()

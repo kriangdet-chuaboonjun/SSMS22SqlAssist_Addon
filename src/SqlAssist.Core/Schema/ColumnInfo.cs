@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SqlAssist.Core.Sql;
 
 namespace SqlAssist.Core.Schema
 {
@@ -14,6 +15,21 @@ namespace SqlAssist.Core.Schema
     /// The description is the column's MS_Description; for a CTE column it is the one of the column passed through.</summary>
     public static class ColumnInfo
     {
+        /// <summary>The table a hovered column belongs to: the one its qualifier names, or, unqualified, the only table in
+        /// <paramref name="scope"/> that has it. Null when that cannot be told for sure — several tables have it, or a
+        /// table in scope is unknown to the schema (a #temp table, a table variable) and might be the one.</summary>
+        public static (DbObject owner, DbColumn column)? FindOwner(SchemaModel schema, TableRef table, IReadOnlyList<TableRef> scope, string column)
+        {
+            var resolved = (table != null ? new[] { table } : scope ?? new TableRef[0]).Select(schema.Find).ToList();
+            if (table == null && resolved.Any(o => o == null)) return null;
+            var matches = resolved
+                .Where(o => o != null)
+                .Select(o => (owner: o, column: o.Columns.FirstOrDefault(c => string.Equals(c.Name, column, StringComparison.OrdinalIgnoreCase))))
+                .Where(x => x.column != null)
+                .ToList();
+            return matches.Count == 1 ? matches[0] : ((DbObject, DbColumn)?)null;
+        }
+
         public static string Describe(SchemaModel schema, DbObject owner, DbColumn column)
         {
             var lines = new List<string> { $"{owner}.{column.Name} (Column)" };

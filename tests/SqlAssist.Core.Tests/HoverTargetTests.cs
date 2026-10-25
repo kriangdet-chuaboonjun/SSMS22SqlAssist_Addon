@@ -69,6 +69,11 @@ namespace SqlAssist.Core.Tests
             Assert.Equal("ReqId", SpanOf(sql, h));
         }
 
+        [Theory]
+        [InlineData("SELECT wr.Code AS Tot|al FROM Work_Request wr")]
+        [InlineData("SELECT CAST(wr.Code AS in|t) FROM Work_Request wr")]
+        public void NameAfterAsIsNotAColumn(string sql) => Assert.Null(Target(sql));
+
         [Fact]
         public void UnqualifiedColumn_ScopeHasBothTables()
         {

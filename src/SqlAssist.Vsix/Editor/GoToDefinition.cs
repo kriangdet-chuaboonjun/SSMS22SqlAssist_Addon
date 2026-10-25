@@ -53,11 +53,13 @@ namespace SqlAssist.Editor
                     return true;
                 }
 
-                // The schema the cache resolved the name to: "vOrders" may live in Sales, not the login's default schema.
+                // The schema and name as the database spells them: "vOrders" may live in Sales, not the login's default
+                // schema, and a case-sensitive database would not find "vorders".
                 string resolvedSchema = table?.Schema ?? routine.Schema;
+                string resolvedName = table?.Name ?? routine.Name;
                 var type = table != null ? SearchObjectType.View : routine.IsProcedure ? SearchObjectType.Procedure : SearchObjectType.Function;
-                ScriptDelivery.Status("SqlAssist: reading the definition of " + resolvedSchema + "." + name + "...");
-                ThreadHelper.JoinableTaskFactory.RunAsync(() => OpenDefinitionAsync(target, resolvedSchema, name, type))
+                ScriptDelivery.Status("SqlAssist: reading the definition of " + resolvedSchema + "." + resolvedName + "...");
+                ThreadHelper.JoinableTaskFactory.RunAsync(() => OpenDefinitionAsync(target, resolvedSchema, resolvedName, type))
                     .FileAndForget("SqlAssist/GoToDefinition");
                 return true;
             }

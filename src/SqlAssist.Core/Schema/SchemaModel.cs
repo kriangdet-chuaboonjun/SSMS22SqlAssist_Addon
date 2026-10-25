@@ -173,6 +173,11 @@ namespace SqlAssist.Core.Schema
             return r.HasColumns ? Find(r.Schema, r.Name) : null;
         }
 
+        /// <summary>Whether the query names a table or view this schema does not have (it may have just been created, so a
+        /// reload is worth it). Functions do not count: built-in ones (STRING_SPLIT, OPENJSON) and old-style hints
+        /// ("FROM t (NOLOCK)") are never in the schema and would reload it again and again.</summary>
+        public bool HasUnknownTables(IEnumerable<TableRef> tables) => tables.Any(t => t.HasColumns && !t.IsFunction && Find(t) == null);
+
         /// <summary>A table-valued function as a table of its result columns (the same instance every time), so
         /// "FROM dbo.fn(1) f" works like a table; null for other routines or when the columns are unknown.</summary>
         public DbObject FindFunctionTable(string schema, string name)

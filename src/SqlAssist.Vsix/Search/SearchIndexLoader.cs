@@ -39,7 +39,10 @@ FROM sys.indexes i
 JOIN sys.objects o ON o.object_id = i.object_id
 JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
 JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-WHERE i.type IN (1, 2) AND i.is_hypothetical = 0 AND o.is_ms_shipped = 0 AND o.type IN ('U', 'V')
+-- Any primary key (a memory-optimized table's may be a hash index); leave out the partitioning column SQL Server adds
+-- to an index on its own (key_ordinal 0, not included).
+WHERE (i.type IN (1, 2) OR i.is_primary_key = 1) AND i.is_hypothetical = 0 AND o.is_ms_shipped = 0 AND o.type IN ('U', 'V')
+  AND (ic.key_ordinal > 0 OR ic.is_included_column = 1)
 ORDER BY i.object_id, i.index_id, ic.is_included_column, ic.key_ordinal, ic.index_column_id;
 
 SELECT fk.object_id, fk.parent_object_id, fk.name, rs.name, rt.name, pc.name, rc.name

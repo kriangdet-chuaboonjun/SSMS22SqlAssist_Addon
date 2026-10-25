@@ -331,7 +331,7 @@ namespace SqlAssist.Editor
             string columns = StarExpander.Expand(star, schema, linePrefix, newLine);
             if (columns == null)
             {
-                SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
+                if (schema.HasUnknownTables(star.Tables)) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
                 Log.Info("SELECT * expansion skipped: table not found in schema of " + target);
                 return false;
             }

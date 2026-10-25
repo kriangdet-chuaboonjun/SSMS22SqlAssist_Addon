@@ -296,7 +296,8 @@ namespace SqlAssist.Core.Sql
                 var owner = visible.FirstOrDefault(t => t.Answers(qualifier)) ?? stmt.Tables.FirstOrDefault(t => t.HasColumns && t.Answers(qualifier));
                 return owner == null ? null : new HoverTarget { Kind = HoverKind.Column, Table = owner, Column = token.Value, Start = token.Start, End = token.End };
             }
-            if (k < last || visible.Count == 0) return null;
+            // "AS Total" names a column alias, "AS int" a type: neither is a column of the tables.
+            if (k < last || visible.Count == 0 || (k > 0 && sig[k - 1].IsWord("AS"))) return null;
             return new HoverTarget { Kind = HoverKind.Column, Column = token.Value, Scope = visible, Start = token.Start, End = token.End };
         }
 
