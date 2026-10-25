@@ -27,7 +27,8 @@ namespace SqlAssist.Core.Sql
         public string RefName => Alias ?? Name;
         /// <summary>Set when the reference names a CTE of the statement, or is a derived table "(SELECT ...) d".</summary>
         public DerivedTable Derived { get; set; }
-        public bool HasColumns => Derived != null || (!IsDerived && !IsFunction);
+        /// <summary>True for tables, views, CTEs, derived tables and table-valued functions.</summary>
+        public bool HasColumns => Derived != null || !IsDerived;
 
         public bool Answers(string qualifier) =>
             string.Equals(Alias, qualifier, StringComparison.OrdinalIgnoreCase) ||

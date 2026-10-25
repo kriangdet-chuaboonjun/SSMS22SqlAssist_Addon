@@ -76,6 +76,7 @@ namespace SqlAssist.Core.Schema
                 Schema = o.Schema,
                 Name = o.Name,
                 Kind = o.Kind,
+                Returns = o.Kind == "Function" ? "TABLE" : null,
                 Description = string.IsNullOrWhiteSpace(o.Description) ? null : o.Description.Trim(),
                 Columns = columns,
                 HiddenColumns = Math.Max(0, o.Columns.Count - maxColumns),

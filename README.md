@@ -222,7 +222,7 @@ snippet เก็บอยู่ที่ไฟล์ `%APPDATA%\SqlAssist\snipp
 - รองรับแค่ Windows auth กับ SQL auth ยังไม่รองรับ Entra ID / Azure AD
 - database ที่ใช้มาจาก connection ของหน้าต่าง query (`AdvancedOptions["DATABASE"]` ของ SSMS) ถ้าเปลี่ยนด้วย `USE` แล้วรายการยังไม่เปลี่ยนตาม ให้เลือก database จาก dropdown แทน
 - แบ่ง statement ด้วย `;`, `GO` หรือบรรทัดว่าง ถ้าเขียนหลาย query ติดกันโดยไม่มีตัวคั่น ตารางของ query อื่นอาจโผล่มาในรายการด้วย
-- ไม่รู้จักคอลัมน์ของ table-valued function
+- คอลัมน์ของ table-valued function มาจาก function ใน database เท่านั้น function ในตัวของ SQL Server (`STRING_SPLIT`, `OPENJSON` ฯลฯ) ยังไม่รู้จัก และ TVF ที่เพิ่งสร้างใหม่ต้องกด **Ctrl+Shift+R** ก่อน
 - คอลัมน์ของ CTE ที่คำนวณจาก expression (เช่น `YEAR(OrderDate) AS SalesYear`) จะไม่มีชนิดข้อมูล รู้ชนิดเฉพาะคอลัมน์ที่ดึงมาจากตารางตรง ๆ
 - Search: ยังไม่ค้นข้อมูลในตาราง (data search), index, constraint และ user-defined type และ preview หรือ script ของตารางเป็น `CREATE TABLE` แบบย่อ ไม่ใช่ script เต็มแบบของ SSMS ส่วน definition ที่เปิดใน query window เป็นข้อความ `CREATE` ตามที่ SQL Server เก็บไว้ ถ้าจะแก้ต้องเปลี่ยนเป็น `ALTER` เอง
 - Search: ถ้าไม่มีหน้าต่าง query ที่ active อยู่ จะใช้ connection ล่าสุดที่เคยเห็น

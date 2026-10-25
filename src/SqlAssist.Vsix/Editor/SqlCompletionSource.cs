@@ -118,7 +118,8 @@ namespace SqlAssist.Editor
 
                 var schema = await SchemaCache.Instance.GetAsync(target, SchemaWait, token).ConfigureAwait(false);
 
-                if (schema.Objects.Count > 0 && ctx.TablesInScope.Any(t => t.HasColumns && schema.Find(t) == null))
+                // Not for functions: built-in ones (STRING_SPLIT, OPENJSON) are never in the schema and would reload it every 30s.
+                if (schema.Objects.Count > 0 && ctx.TablesInScope.Any(t => t.HasColumns && !t.IsFunction && schema.Find(t) == null))
                     SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
 
                 var items = new List<CompletionItem>();

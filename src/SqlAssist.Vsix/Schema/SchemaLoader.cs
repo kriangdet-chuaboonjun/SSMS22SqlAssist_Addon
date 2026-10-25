@@ -33,7 +33,8 @@ LEFT JOIN rc ON rc.object_id = o.object_id
 -- MS_Description: what SSMS's table designer and most documentation tools write.
 LEFT JOIN sys.extended_properties cd ON cd.class = 1 AND cd.major_id = c.object_id AND cd.minor_id = c.column_id AND cd.name = 'MS_Description'
 LEFT JOIN sys.extended_properties td ON td.class = 1 AND td.major_id = o.object_id AND td.minor_id = 0 AND td.name = 'MS_Description'
-WHERE o.type IN ('U', 'V') AND o.is_ms_shipped = 0
+-- Table-valued functions' result columns come along; they are attached to the routine, not listed as tables.
+WHERE o.type IN ('U', 'V', 'IF', 'TF', 'FT') AND o.is_ms_shipped = 0
 ORDER BY s.name, o.name, c.column_id;
 
 SELECT fk.name, ps.name, pt.name, rs.name, rt.name, pc.name, rc.name
@@ -65,6 +66,7 @@ ORDER BY s.name, o.name, p.parameter_id;";
             var byKey = new Dictionary<string, DbObject>(System.StringComparer.OrdinalIgnoreCase);
             var fks = new List<ForeignKey>();
             var routines = new List<DbRoutine>();
+            var functionColumns = new Dictionary<string, DbColumn[]>(System.StringComparer.OrdinalIgnoreCase);
 
             using (var conn = new SqlConnection(connectionString))
             {
@@ -79,7 +81,13 @@ ORDER BY s.name, o.name, p.parameter_id;";
                     void FlushObject()
                     {
                         if (curName == null) return;
-                        var o = new DbObject(curSchema, curName, curType.Trim() == "V", columns.ToArray(), curRows, curDescription);
+                        string type = curType.Trim();
+                        if (type != "U" && type != "V")
+                        {
+                            functionColumns[curSchema + "." + curName] = columns.ToArray();
+                            return;
+                        }
+                        var o = new DbObject(curSchema, curName, type == "V", columns.ToArray(), curRows, curDescription);
                         objects.Add(o);
                         byKey[curSchema + "." + curName] = o;
                     }
@@ -136,7 +144,8 @@ ORDER BY s.name, o.name, p.parameter_id;";
                     var parameters = new List<DbParameter>();
                     void FlushRoutine()
                     {
-                        if (rName != null) routines.Add(new DbRoutine(rSchema, rName, rKind, parameters.ToArray(), rReturns, rDescription));
+                        if (rName != null) routines.Add(new DbRoutine(rSchema, rName, rKind, parameters.ToArray(), rReturns, rDescription,
+                            functionColumns.TryGetValue(rSchema + "." + rName, out var tvf) ? tvf : null));
                     }
 
                     while (await reader.ReadAsync(token).ConfigureAwait(false))

@@ -33,12 +33,16 @@ namespace SqlAssist.Core.Completion
         private static List<string> Columns(StarContext star, SchemaModel schema)
         {
             var resolved = new List<(TableRef r, DbObject o)>();
+            int expected = 0;
             foreach (var r in star.Tables)
             {
                 var o = schema.Find(r);
+                // A function the schema does not know (STRING_SPLIT, OPENJSON) is left out rather than blocking the rest.
+                if (r.IsFunction && o == null) continue;
+                expected++;
                 if (o != null && o.Columns.Count > 0) resolved.Add((r, o));
             }
-            if (resolved.Count == 0 || resolved.Count < star.Tables.Count) return null;
+            if (resolved.Count == 0 || resolved.Count < expected) return null;
 
             // One table without an alias: bare names. Otherwise qualify, so the list survives later JOINs.
             bool qualify = star.Qualifier != null || resolved.Count > 1 || resolved[0].r.Alias != null;

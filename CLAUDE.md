@@ -122,5 +122,6 @@ instead. Connection/reflection code runs on the UI thread (`ThreadHelper.ThrowIf
 Statement boundaries for completion are `;`, `GO` or a blank line — except a blank line inside parentheses or right
 after a CTE (`WITH x AS (...)` ⏎⏎ `SELECT`). CTE and derived-table columns come from the query text
 (`DerivedTable`, linked to `TableRef.Derived`; `SchemaModel.Find(TableRef)` resolves them, borrowing types and
-MS_Description from the columns they pass through). Known v1 gaps (don't assume they work): TVF columns, `USE`
-switching the database, data search, index/constraint/UDT search.
+MS_Description from the columns they pass through). TVF columns are loaded with the schema and hang off `DbRoutine.Columns`
+(`SchemaModel.FindFunctionTable`); built-in TVFs (STRING_SPLIT, OPENJSON) are unknown and skipped. Known v1 gaps (don't
+assume they work): `USE` switching the database, data search, index/constraint/UDT search.

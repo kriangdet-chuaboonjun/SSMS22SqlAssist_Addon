@@ -72,11 +72,12 @@ namespace SqlAssist.Core.Schema
     public sealed class DbRoutine
     {
         public DbRoutine(string schema, string name, RoutineKind kind, IReadOnlyList<DbParameter> parameters,
-            string returnType = null, string description = null)
+            string returnType = null, string description = null, IReadOnlyList<DbColumn> columns = null)
         {
             Schema = schema; Name = name; Kind = kind; Parameters = parameters;
             ReturnType = returnType ?? (kind == RoutineKind.TableFunction ? "TABLE" : null);
             Description = description;
+            Columns = columns ?? new DbColumn[0];
         }
         public string Schema { get; }
         public string Name { get; }
@@ -87,6 +88,8 @@ namespace SqlAssist.Core.Schema
         public string ReturnType { get; }
         /// <summary>The MS_Description extended property, if any.</summary>
         public string Description { get; }
+        /// <summary>A table-valued function's result columns; empty for everything else.</summary>
+        public IReadOnlyList<DbColumn> Columns { get; }
         public override string ToString() => Schema + "." + Name;
     }
 
@@ -112,12 +115,16 @@ namespace SqlAssist.Core.Schema
         private readonly Dictionary<string, List<DbObject>> _byName = new Dictionary<string, List<DbObject>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<DbObject, List<ForeignKey>> _from = new Dictionary<DbObject, List<ForeignKey>>();
         private readonly Dictionary<DbObject, List<ForeignKey>> _to = new Dictionary<DbObject, List<ForeignKey>>();
+        private readonly Dictionary<DbRoutine, DbObject> _functionTables = new Dictionary<DbRoutine, DbObject>();
 
         public SchemaModel(IReadOnlyList<DbObject> objects, IReadOnlyList<ForeignKey> foreignKeys, IReadOnlyList<DbRoutine> routines = null)
         {
             Objects = objects;
             ForeignKeys = foreignKeys;
             Routines = routines ?? new DbRoutine[0];
+            foreach (var r in Routines)
+                if (r.Columns.Count > 0)
+                    _functionTables[r] = new DbObject(r.Schema, r.Name, false, r.Columns, description: r.Description, kind: "Function");
             foreach (var o in objects)
             {
                 if (!_byName.TryGetValue(o.Name, out var list)) _byName[o.Name] = list = new List<DbObject>();
@@ -162,7 +169,16 @@ namespace SqlAssist.Core.Schema
         public DbObject Find(TableRef r)
         {
             if (r.Derived != null) return r.Derived.Resolve(this);
+            if (r.IsFunction) return FindFunctionTable(r.Schema, r.Name);
             return r.HasColumns ? Find(r.Schema, r.Name) : null;
+        }
+
+        /// <summary>A table-valued function as a table of its result columns (the same instance every time), so
+        /// "FROM dbo.fn(1) f" works like a table; null for other routines or when the columns are unknown.</summary>
+        public DbObject FindFunctionTable(string schema, string name)
+        {
+            var routine = FindRoutine(schema, name);
+            return routine != null && _functionTables.TryGetValue(routine, out var table) ? table : null;
         }
 
         public IReadOnlyList<ForeignKey> ForeignKeysFrom(DbObject o) => _from.TryGetValue(o, out var l) ? l : (IReadOnlyList<ForeignKey>)new ForeignKey[0];
