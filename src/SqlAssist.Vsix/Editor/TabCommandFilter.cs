@@ -64,9 +64,9 @@ namespace SqlAssist.Editor
         public int QueryStatus(ref Guid pguidCmdGroup, uint cCmds, OLECMD[] prgCmds, IntPtr pCmdText)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
-            if (cCmds == 1 && RefreshCommand.Matches(pguidCmdGroup, prgCmds[0].cmdID))
+            if (cCmds == 1 && (RefreshCommand.Matches(pguidCmdGroup, prgCmds[0].cmdID) || IsGoToDefinition(pguidCmdGroup, prgCmds[0].cmdID)))
             {
-                // Keep Ctrl+Shift+R alive even with SSMS's own IntelliSense switched off.
+                // Keep Ctrl+Shift+R and F12 alive even with SSMS's own IntelliSense switched off.
                 prgCmds[0].cmdf = (uint)(OLECMDF.OLECMDF_SUPPORTED | OLECMDF.OLECMDF_ENABLED);
                 return VSConstants.S_OK;
             }
@@ -85,6 +85,8 @@ namespace SqlAssist.Editor
                     Next.Exec(ref pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
                     return VSConstants.S_OK;
                 }
+
+                if (IsGoToDefinition(pguidCmdGroup, nCmdID) && GoToDefinition.TryRun(_view)) return VSConstants.S_OK;
 
                 if (pguidCmdGroup == VSConstants.VSStd2K)
                 {
@@ -190,6 +192,9 @@ namespace SqlAssist.Editor
             node = TreeState.NodeOf(item);
             return node != null;
         }
+
+        private static bool IsGoToDefinition(Guid group, uint id) =>
+            group == VSConstants.GUID_VSStandardCommandSet97 && id == (uint)VSConstants.VSStd97CmdID.GotoDefn;
 
         private bool HandleTab()
         {

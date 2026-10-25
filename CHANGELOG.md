@@ -12,6 +12,7 @@
 - **คอลัมน์ของ table-valued function:** `FROM dbo.fnOrders(1) f` แล้วพิมพ์ `f.` จะขึ้นคอลัมน์ที่ function คืนมา `SELECT *` + Tab ขยายคอลัมน์ได้ และชี้เมาส์ที่ชื่อ function จะเห็นคอลัมน์ทั้งหมดพร้อมข้อความ "returns TABLE" (ใช้กับ `CROSS APPLY` / `OUTER APPLY` ได้ด้วย)
 - **ตามคำสั่ง `USE`:** ถ้าในสคริปต์มี `USE ชื่อdb` อยู่เหนือ caret รายการ completion, `SELECT *` + Tab, การขยาย statement ด้วย Tab และการชี้เมาส์ จะใช้ตารางของ database นั้น ไม่ต้องรันสคริปต์หรือเปลี่ยน dropdown ก่อน
 - **ชี้เมาส์ที่คอลัมน์และ procedure / function:** ชี้ที่ `wr.ReqId` หรือ `ReqId` จะเห็นชนิดข้อมูล, primary key / foreign key และคำอธิบาย (MS_Description) ชี้ที่ชื่อหลัง `EXEC` หรือ function ที่เรียกอยู่ (`dbo.fnTax(...)`) จะเห็น parameter ทุกตัว (เดิมชี้ได้แค่ชื่อตารางกับ alias)
+- **F12 Go to Definition:** วาง caret ที่ชื่อ object แล้วกด F12 (หรือคลิกขวา › Go To Definition) ตารางจะเปิดใน Object Explorer ส่วน view / procedure / function / trigger จะเปิด script ในหน้าต่าง query ใหม่ที่ขึ้นต้นด้วย `USE [database]` (ไม่รันให้)
 
 ## [1.4.1] - 2026-10-25
 
