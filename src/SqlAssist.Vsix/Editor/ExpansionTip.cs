@@ -90,7 +90,7 @@ namespace SqlAssist.Editor
                 var star = SqlContextAnalyzer.FindStar(window.Text, window.Caret);
                 var exec = star == null ? StatementExpander.Find(window.Text, window.Caret) : null;
                 if (exec != null && exec.Kind != ExpansionKind.Exec) exec = null;
-                var target = star == null && exec == null ? null : ActiveConnection.TryGet();
+                var target = star == null && exec == null ? null : EditorConnection.Get(window);
                 if (target == null)
                 {
                     Hide();

@@ -21,6 +21,23 @@ namespace SqlAssist.Connection
         /// <summary>SSMS's own UIConnectionInfo for this connection, for opening a new query window on it.</summary>
         public object UiConnectionInfo { get; set; }
         public override string ToString() => Server + "/" + (Database ?? "(default)");
+
+        /// <summary>The same server and login in another database (a script's <c>USE</c>): its own schema cache entry.</summary>
+        public ConnectionTarget ForDatabase(string database)
+        {
+            if (string.Equals(database, Database, StringComparison.OrdinalIgnoreCase)) return this;
+            return new ConnectionTarget
+            {
+                Server = Server,
+                Database = database,
+                ConnectionString = new SqlConnectionStringBuilder(ConnectionString) { InitialCatalog = database }.ConnectionString,
+                Key = (Server + "|" + database + "|" + (IntegratedSecurity ? "windows" : UserName)).ToLowerInvariant(),
+                ServerKey = ServerKey,
+                IntegratedSecurity = IntegratedSecurity,
+                UserName = UserName,
+                UiConnectionInfo = UiConnectionInfo,
+            };
+        }
     }
 
     /// <summary>Reads the active query window's connection from SSMS. There is no public API for this, so it goes

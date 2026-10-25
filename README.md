@@ -220,7 +220,7 @@ snippet เก็บอยู่ที่ไฟล์ `%APPDATA%\SqlAssist\snipp
 ## ข้อจำกัด (v1)
 
 - รองรับแค่ Windows auth กับ SQL auth ยังไม่รองรับ Entra ID / Azure AD
-- database ที่ใช้มาจาก connection ของหน้าต่าง query (`AdvancedOptions["DATABASE"]` ของ SSMS) ถ้าเปลี่ยนด้วย `USE` แล้วรายการยังไม่เปลี่ยนตาม ให้เลือก database จาก dropdown แทน
+- database ที่ใช้มาจาก connection ของหน้าต่าง query (`AdvancedOptions["DATABASE"]` ของ SSMS) ถ้าในสคริปต์มี `USE ชื่อdb` อยู่เหนือ caret จะใช้ database นั้นแทน (ตัวล่าสุดที่อยู่เหนือ caret) แต่มองเห็นแค่ `USE` ที่อยู่ไม่เกินประมาณ 20,000 ตัวอักษรเหนือ caret ถ้าอยู่ไกลกว่านั้นจะกลับไปใช้ database ของหน้าต่าง
 - แบ่ง statement ด้วย `;`, `GO` หรือบรรทัดว่าง ถ้าเขียนหลาย query ติดกันโดยไม่มีตัวคั่น ตารางของ query อื่นอาจโผล่มาในรายการด้วย
 - คอลัมน์ของ table-valued function มาจาก function ใน database เท่านั้น function ในตัวของ SQL Server (`STRING_SPLIT`, `OPENJSON` ฯลฯ) ยังไม่รู้จัก และ TVF ที่เพิ่งสร้างใหม่ต้องกด **Ctrl+Shift+R** ก่อน
 - คอลัมน์ของ CTE ที่คำนวณจาก expression (เช่น `YEAR(OrderDate) AS SalesYear`) จะไม่มีชนิดข้อมูล รู้ชนิดเฉพาะคอลัมน์ที่ดึงมาจากตารางตรง ๆ

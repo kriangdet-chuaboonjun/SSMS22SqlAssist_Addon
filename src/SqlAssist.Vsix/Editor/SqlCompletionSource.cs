@@ -87,7 +87,7 @@ namespace SqlAssist.Editor
                 }
 
                 // Called on the UI thread, which is where SSMS's connection objects must be read.
-                if (ThreadHelper.CheckAccess()) _target = ActiveConnection.TryGet();
+                if (ThreadHelper.CheckAccess()) _target = EditorConnection.Get(window);
                 var span = new SnapshotSpan(triggerLocation.Snapshot, window.Offset + ctx.WordStart, ctx.WordEnd - ctx.WordStart);
                 return new CompletionStartData(CompletionParticipation.ProvidesItems, span);
             }

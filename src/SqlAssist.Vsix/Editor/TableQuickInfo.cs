@@ -83,7 +83,7 @@ namespace SqlAssist.Editor
                 var hover = SqlContextAnalyzer.FindHoverTarget(window.Text, window.Caret);
                 if (hover == null) return null;
 
-                var schema = SchemaCache.Instance.TryGetLoaded(ActiveConnection.TryGet());
+                var schema = SchemaCache.Instance.TryGetLoaded(EditorConnection.Get(window));
                 var table = schema?.Find(hover.Table);
                 if (table == null) return null;
 

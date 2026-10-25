@@ -10,6 +10,7 @@
 
 ### เพิ่ม
 - **คอลัมน์ของ table-valued function:** `FROM dbo.fnOrders(1) f` แล้วพิมพ์ `f.` จะขึ้นคอลัมน์ที่ function คืนมา `SELECT *` + Tab ขยายคอลัมน์ได้ และชี้เมาส์ที่ชื่อ function จะเห็นคอลัมน์ทั้งหมดพร้อมข้อความ "returns TABLE" (ใช้กับ `CROSS APPLY` / `OUTER APPLY` ได้ด้วย)
+- **ตามคำสั่ง `USE`:** ถ้าในสคริปต์มี `USE ชื่อdb` อยู่เหนือ caret รายการ completion, `SELECT *` + Tab, การขยาย statement ด้วย Tab และการชี้เมาส์ จะใช้ตารางของ database นั้น ไม่ต้องรันสคริปต์หรือเปลี่ยน dropdown ก่อน
 
 ## [1.4.1] - 2026-10-25
 

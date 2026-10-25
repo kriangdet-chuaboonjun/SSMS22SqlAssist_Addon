@@ -228,7 +228,7 @@ namespace SqlAssist.Editor
             var found = StatementExpander.Find(window.Text, window.Caret);
             if (found == null) return false;
 
-            var target = ActiveConnection.TryGet();
+            var target = EditorConnection.Get(window);
             if (target == null)
             {
                 Log.Info("Statement expansion skipped: no connected query window");
@@ -308,7 +308,7 @@ namespace SqlAssist.Editor
             var star = SqlContextAnalyzer.FindStar(window.Text, window.Caret);
             if (star == null) return false;
 
-            var target = ActiveConnection.TryGet();
+            var target = EditorConnection.Get(window);
             if (target == null)
             {
                 Log.Info("SELECT * expansion skipped: no connected query window");
