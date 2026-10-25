@@ -93,10 +93,21 @@ namespace SqlAssist.Core.Sql
         public string JoinConditionSoFar { get; internal set; }
     }
 
-    /// <summary>The table under the mouse and the text span the tooltip belongs to.</summary>
+    public enum HoverKind { Table, Column, Routine }
+
+    /// <summary>What is under the mouse (a table, a column or a procedure/function) and the text span the tooltip belongs to.</summary>
     public sealed class HoverTarget
     {
+        public HoverKind Kind { get; internal set; }
+        /// <summary>For Table: the reference. For Column: the table its qualifier names, or null when unqualified.</summary>
         public TableRef Table { get; internal set; }
+        /// <summary>For Column: the column name.</summary>
+        public string Column { get; internal set; }
+        /// <summary>For an unqualified Column: the tables it could belong to.</summary>
+        public IReadOnlyList<TableRef> Scope { get; internal set; }
+        /// <summary>For Routine: the name as written (schema may be null).</summary>
+        public string Schema { get; internal set; }
+        public string Name { get; internal set; }
         public int Start { get; internal set; }
         public int End { get; internal set; }
     }
@@ -233,8 +244,10 @@ namespace SqlAssist.Core.Sql
             return result;
         }
 
-        /// <summary>Which table the mouse is over: its name in FROM/JOIN (with any schema part), its alias where it
-        /// is declared, or the alias / table name used elsewhere in the statement ("wr" in "wr.ReqId").</summary>
+        /// <summary>What the mouse is over, first match wins: a table — its name in FROM/JOIN (with any schema part), its
+        /// alias where it is declared, or the alias / table name used elsewhere ("wr" in "wr.ReqId"); a procedure or
+        /// function — a name after EXEC or right before "("; a column — "wr.ReqId", or a bare name when the statement has
+        /// tables. Reserved words, variables, strings and comments give null.</summary>
         public static HoverTarget FindHoverTarget(string text, int position)
         {
             if (position < 0 || position > text.Length) return null;
@@ -250,7 +263,37 @@ namespace SqlAssist.Core.Sql
             }
             // A use of the alias (or of an unaliased table's name) elsewhere: "wr" in "wr.ReqId".
             var used = stmt.Tables.FirstOrDefault(t => t.HasColumns && t.Answers(token.Value));
-            return used == null ? null : new HoverTarget { Table = used, Start = token.Start, End = token.End };
+            if (used != null) return new HoverTarget { Table = used, Start = token.Start, End = token.End };
+
+            if (token.Kind == TokenKind.Word && SqlKeywords.IsReserved(token.Text)) return null;
+            var sig = stmt.Sig;
+            int k = sig.FindIndex(t => t.Start == token.Start);
+            if (k < 0) return null;
+            // The dotted name the token is part of: "dbo.fnTax", "wr.ReqId".
+            int first = k, last = k;
+            while (first >= 2 && sig[first - 1].IsSymbol('.') && sig[first - 2].IsName && sig[first - 2].End == sig[first - 1].Start && sig[first - 1].End == sig[first].Start) first -= 2;
+            while (last + 2 < sig.Count && sig[last + 1].IsSymbol('.') && sig[last + 2].IsName && sig[last].End == sig[last + 1].Start && sig[last + 1].End == sig[last + 2].Start) last += 2;
+
+            bool call = last + 1 < sig.Count && sig[last + 1].IsSymbol('(') && sig[last + 1].Start == sig[last].End;
+            if (call || IsExecAt(sig, first - 1))
+                return new HoverTarget
+                {
+                    Kind = HoverKind.Routine,
+                    Name = sig[last].Value,
+                    Schema = last - first >= 2 ? sig[last - 2].Value : null,
+                    Start = sig[first].Start,
+                    End = sig[last].End,
+                };
+
+            var visible = stmt.TablesVisibleFrom(stmt.GroupOf[k], stmt.SegmentOf[k]).Where(t => t.HasColumns).ToList();
+            if (k > first)
+            {
+                string qualifier = sig[k - 2].Value;
+                var owner = visible.FirstOrDefault(t => t.Answers(qualifier)) ?? stmt.Tables.FirstOrDefault(t => t.HasColumns && t.Answers(qualifier));
+                return owner == null ? null : new HoverTarget { Kind = HoverKind.Column, Table = owner, Column = token.Value, Start = token.Start, End = token.End };
+            }
+            if (k < last || visible.Count == 0) return null;
+            return new HoverTarget { Kind = HoverKind.Column, Column = token.Value, Scope = visible, Start = token.Start, End = token.End };
         }
 
         /// <summary>The identifier ending at the caret, when it could be a snippet shortcut.</summary>

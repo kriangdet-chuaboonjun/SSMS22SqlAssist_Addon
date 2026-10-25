@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.Intellisense;
@@ -60,7 +61,8 @@ namespace SqlAssist.Editor
         }
     }
 
-    /// <summary>Hovering a table name or alias in the query shows the same table panel as the completion list.
+    /// <summary>Hovering a table name or alias shows the same table panel as the completion list; a procedure or function
+    /// shows its parameters, and a column its type, keys and description.
     /// Uses only an already-loaded schema: a tooltip must not wait on (or start) a database round trip.</summary>
     internal sealed class TableQuickInfoSource : IAsyncQuickInfoSource
     {
@@ -84,16 +86,28 @@ namespace SqlAssist.Editor
                 if (hover == null) return null;
 
                 var schema = SchemaCache.Instance.TryGetLoaded(EditorConnection.Get(window));
-                var table = schema?.Find(hover.Table);
-                if (table == null) return null;
+                if (schema == null) return null;
 
-                var view = TableDetailsView.Create(
-                    TableDetails.Build(schema, table),
-                    SqlCompletionPresenterProvider.KeywordBrush(_provider.FormatMaps, _provider.Classifications, session.TextView),
-                    EnvironmentColors.ToolTipTextBrushKey,
-                    EnvironmentColors.ToolTipBorderBrushKey);
+                object content;
+                if (hover.Kind == HoverKind.Column)
+                {
+                    content = DescribeColumn(schema, hover);
+                }
+                else
+                {
+                    var details = hover.Kind == HoverKind.Routine
+                        ? (schema.FindRoutine(hover.Schema, hover.Name) is DbRoutine routine ? TableDetails.Build(routine) : null)
+                        : (schema.Find(hover.Table) is DbObject table ? TableDetails.Build(schema, table) : null);
+                    content = details == null ? null : TableDetailsView.Create(
+                        details,
+                        SqlCompletionPresenterProvider.KeywordBrush(_provider.FormatMaps, _provider.Classifications, session.TextView),
+                        EnvironmentColors.ToolTipTextBrushKey,
+                        EnvironmentColors.ToolTipBorderBrushKey);
+                }
+                if (content == null) return null;
+
                 var span = point.Snapshot.CreateTrackingSpan(window.Offset + hover.Start, hover.End - hover.Start, SpanTrackingMode.EdgeInclusive);
-                return new QuickInfoItem(span, view);
+                return new QuickInfoItem(span, content);
             }
             catch (OperationCanceledException)
             {
@@ -104,6 +118,19 @@ namespace SqlAssist.Editor
                 Log.Error("Table quick info", ex);
                 return null;
             }
+        }
+
+        /// <summary>The column's text as in the completion list. An unqualified name is shown only when exactly one table in
+        /// scope has it: picking one of several would describe a column the query may not mean.</summary>
+        private static string DescribeColumn(SchemaModel schema, HoverTarget hover)
+        {
+            var owners = (hover.Table != null ? new[] { hover.Table } : hover.Scope)
+                .Select(schema.Find)
+                .Where(o => o != null)
+                .Select(o => (o, c: o.Columns.FirstOrDefault(c => string.Equals(c.Name, hover.Column, StringComparison.OrdinalIgnoreCase))))
+                .Where(x => x.c != null)
+                .ToList();
+            return owners.Count == 1 ? ColumnInfo.Describe(schema, owners[0].o, owners[0].c) : null;
         }
 
         public void Dispose()

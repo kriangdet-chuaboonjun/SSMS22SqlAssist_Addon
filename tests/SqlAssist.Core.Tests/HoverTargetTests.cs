@@ -1,3 +1,4 @@
+using System.Linq;
 using SqlAssist.Core.Sql;
 using Xunit;
 
@@ -37,10 +38,73 @@ namespace SqlAssist.Core.Tests
             Assert.Equal(("Orders", "Orders"), Hover("SELECT Ord|ers.OrderID FROM Orders"));
 
         [Theory]
-        [InlineData("SELECT wr.Req|Id FROM Work_Request wr")]
         [InlineData("SEL|ECT 1 FROM Work_Request wr")]
         [InlineData("SELECT 'Work_Req|uest' FROM Work_Request wr")]
-        public void NothingToShow(string sql) => Assert.Null(Hover(sql));
+        [InlineData("SELECT @v|ar FROM Work_Request wr")]
+        [InlineData("SELECT Req|Id")]
+        public void NothingToShow(string sql) => Assert.Null(Target(sql));
+
+        private static HoverTarget Target(string sql)
+        {
+            int pos = sql.IndexOf('|');
+            return SqlContextAnalyzer.FindHoverTarget(sql.Remove(pos, 1), pos);
+        }
+
+        private static string SpanOf(string sql, HoverTarget h) => sql.Replace("|", "").Substring(h.Start, h.End - h.Start);
+
+        [Theory]
+        [InlineData("SELECT * FROM Work_Request w|r")]
+        [InlineData("SELECT w|r.ReqId FROM Work_Request wr")]
+        [InlineData("SELECT * FROM dbo.Cust|omers c")]
+        public void TableCasesAreKindTable(string sql) => Assert.Equal(HoverKind.Table, Target(sql).Kind);
+
+        [Fact]
+        public void QualifiedColumn()
+        {
+            const string sql = "SELECT wr.Req|Id FROM Work_Request wr";
+            var h = Target(sql);
+            Assert.Equal(HoverKind.Column, h.Kind);
+            Assert.Equal("Work_Request", h.Table.Name);
+            Assert.Equal("ReqId", h.Column);
+            Assert.Equal("ReqId", SpanOf(sql, h));
+        }
+
+        [Fact]
+        public void UnqualifiedColumn_ScopeHasBothTables()
+        {
+            var h = Target(Query.Replace("SELECT wr.ReqId", "SELECT Req|Id"));
+            Assert.Equal(HoverKind.Column, h.Kind);
+            Assert.Null(h.Table);
+            Assert.Equal("ReqId", h.Column);
+            Assert.Equal(new[] { "Work_Request", "Work_InitialApproval" }, h.Scope.Select(t => t.Name));
+        }
+
+        [Fact]
+        public void ExecProcedure()
+        {
+            const string sql = "EXEC dbo.usp_Ge|tOrders 1";
+            var h = Target(sql);
+            Assert.Equal(HoverKind.Routine, h.Kind);
+            Assert.Equal("dbo", h.Schema);
+            Assert.Equal("usp_GetOrders", h.Name);
+            Assert.Equal("dbo.usp_GetOrders", SpanOf(sql, h));
+        }
+
+        [Fact]
+        public void ExecWithReturnValue() => Assert.Equal("usp_X", Target("EXEC @rc = usp_|X").Name);
+
+        [Fact]
+        public void ScalarFunctionCall()
+        {
+            var h = Target("SELECT dbo.fnTa|x(1) FROM Work_Request wr");
+            Assert.Equal(HoverKind.Routine, h.Kind);
+            Assert.Equal("fnTax", h.Name);
+            Assert.Equal("dbo", h.Schema);
+        }
+
+        // Core does not know built-in function names; the editor finds no such routine and shows nothing.
+        [Fact]
+        public void BuiltInFunctionIsAnUnresolvedRoutine() => Assert.Equal(HoverKind.Routine, Target("SELECT GETD|ATE()").Kind);
 
         [Fact]
         public void DerivedTableAlias_ShowsItsColumns()
