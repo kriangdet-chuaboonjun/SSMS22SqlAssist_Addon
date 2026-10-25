@@ -55,7 +55,7 @@ namespace SqlAssist.Snippets
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
                 string xml = SnippetStore.ToXml(snippets);
-                File.WriteAllText(FilePath, xml, new System.Text.UTF8Encoding(false));
+                WriteFile(xml);
                 _store = SnippetStore.Parse(xml);
                 _loadedWriteTime = File.GetLastWriteTimeUtc(FilePath);
                 _lastCheckUtc = DateTime.UtcNow;
@@ -72,7 +72,7 @@ namespace SqlAssist.Snippets
                 if (!File.Exists(FilePath))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
-                    File.WriteAllText(FilePath, SnippetStore.DefaultXml);
+                    WriteFile(SnippetStore.DefaultXml);
                 }
                 else if (!_defaultsUpgraded)
                 {
@@ -91,12 +91,46 @@ namespace SqlAssist.Snippets
             {
                 string upgraded = SnippetStore.UpgradeDefaults(File.ReadAllText(FilePath));
                 if (upgraded == null) return;
-                File.WriteAllText(FilePath, upgraded, new System.Text.UTF8Encoding(false));
+                WriteFile(upgraded);
                 Log.Info("Added new default snippets to " + FilePath);
             }
             catch (Exception ex)
             {
                 Log.Error("Upgrading default snippets in " + FilePath, ex);
+            }
+        }
+
+        // Written beside the target and swapped in, so a full disk or a killed SSMS leaves the old file, not a truncated one.
+        private static void WriteFile(string text)
+        {
+            string temp = FilePath + ".tmp";
+            try
+            {
+                File.WriteAllText(temp, text, new System.Text.UTF8Encoding(false));
+                if (File.Exists(FilePath)) File.Replace(temp, FilePath, null);
+                else File.Move(temp, FilePath);
+            }
+            catch
+            {
+                try { File.Delete(temp); } catch { /* a stale .tmp is overwritten by the next write */ }
+                throw;
+            }
+        }
+
+        /// <summary>Keeps a copy of a snippets.xml that cannot be read, because saving from the Snippets Manager replaces
+        /// it. Null when there is nothing to copy.</summary>
+        public static string BackupUnreadable()
+        {
+            try
+            {
+                string copy = FilePath + ".unreadable";
+                File.Copy(FilePath, copy, overwrite: true);
+                return copy;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Copying the unreadable " + FilePath, ex);
+                return null;
             }
         }
 

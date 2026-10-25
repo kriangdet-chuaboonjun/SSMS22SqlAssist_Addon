@@ -160,10 +160,13 @@ namespace SqlAssist.Results
             {
                 var args = new object[] { 0L, 0 };
                 var current = grid.GetType().GetMethod("GetCurrentCell", Any);
-                if (current != null)
+                var parameters = current?.GetParameters();
+                // Only (out long row, out int column): any other shape would leave args at (0, 0), i.e. the first cell.
+                if (parameters != null && parameters.Length == 2 &&
+                    parameters[0].ParameterType == typeof(long).MakeByRefType() && parameters[1].ParameterType == typeof(int).MakeByRefType())
                 {
                     current.Invoke(grid, args);
-                    if ((long)args[0] >= 0 && (int)args[1] >= 0) { rows.Add((long)args[0]); columns.Add((int)args[1]); }
+                    if (args[0] is long row && args[1] is int column && row >= 0 && column >= 0) { rows.Add(row); columns.Add(column); }
                 }
             }
             return (rows.ToList(), columns.ToList());

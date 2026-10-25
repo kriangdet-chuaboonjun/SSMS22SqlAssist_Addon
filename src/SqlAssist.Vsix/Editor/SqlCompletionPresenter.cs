@@ -223,6 +223,13 @@ namespace SqlAssist.Editor
             CompletionItemSelected?.Invoke(this, new CompletionItemSelectedEventArgs(row.Item, suggestionItemSelected: false));
         }
 
+        // ListBoxItem selects on click only if it can take focus, and these can't (the editor keeps it), so do it here.
+        private void OnMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(_list, source) is ListBoxItem item)
+                _list.SelectedItem = _list.ItemContainerGenerator.ItemFromContainer(item);
+        }
+
         private void OnDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (_list.SelectedItem is Row row)
@@ -253,6 +260,7 @@ namespace SqlAssist.Editor
             _description = (TextBlock)root.FindName("Description");
             _list.MaxHeight = VisibleRows * RowHeight + 4;
             _list.SelectionChanged += OnSelectionChanged;
+            _list.PreviewMouseLeftButtonDown += OnMouseDown;
             _list.MouseDoubleClick += OnDoubleClick;
             _list.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, new RoutedEventHandler(OnTreeClick));
             // Clicking the list must not take keyboard focus from the editor.

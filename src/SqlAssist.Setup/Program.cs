@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace SqlAssist.Setup
@@ -63,7 +64,7 @@ namespace SqlAssist.Setup
             {
                 if (!first)
                 {
-                    SetupLog.Info("Install on exit: a waiter for " + version + " is already running, this one leaves");
+                    SetupLog.Info("Install on exit: another waiter is already running, this one (" + version + ") leaves");
                     return 0;
                 }
                 SetupLog.Info("Install on exit: waiting for SSMS to close before installing " + version);
@@ -91,6 +92,7 @@ namespace SqlAssist.Setup
                 SetupLog.Info("Install on exit: SSMS closed, installing " + version);
                 bool ran = false;
                 string outcome = null;
+                Task<string> installing = null;
                 string Install()
                 {
                     ran = true;
@@ -108,12 +110,15 @@ namespace SqlAssist.Setup
                 Application.SetCompatibleTextRenderingDefault(false);
                 try
                 {
-                    Application.Run(new InstallOnExitForm(version, ide, Install));
+                    Application.Run(new InstallOnExitForm(version, ide, () => installing = Task.Run(() => Install())));
                 }
                 catch (Exception ex)
                 {
                     SetupLog.Error("Install on exit: progress window failed: " + ex.Message);
                 }
+                // The window can be closed by something other than the user (End task, sign-out) while the install is
+                // still running on its worker thread, which would die with this process: let it finish and write its result.
+                installing?.Wait();
                 // No window (e.g. no desktop to show it on) must not lose the update: install without one.
                 if (!ran) Install();
                 return outcome == null ? 0 : 1;

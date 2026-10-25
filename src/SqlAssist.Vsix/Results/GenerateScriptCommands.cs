@@ -96,6 +96,8 @@ namespace SqlAssist.Results
                 if (_chordPending)
                 {
                     _chordPending = false;
+                    // Focus may have left the grid since Ctrl+J: the key then belongs to whatever has focus now.
+                    if (!ResultsGridReader.IsGridFocused()) return;
                     ResultScriptKind? kind = KindForKey(key);
                     if (kind == null) return;
                     handled = true;

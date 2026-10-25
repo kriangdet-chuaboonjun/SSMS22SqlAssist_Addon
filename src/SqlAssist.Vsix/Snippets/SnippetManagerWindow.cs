@@ -201,7 +201,10 @@ namespace SqlAssist.Snippets
             catch (Exception ex)
             {
                 Log.Error("Snippets Manager: reading " + SnippetProvider.FilePath, ex);
-                MessageBox.Show(this, "อ่านไฟล์ snippets ไม่ได้:\n" + ex.Message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                string copy = SnippetProvider.BackupUnreadable();
+                MessageBox.Show(this, "อ่านไฟล์ snippets ไม่ได้:\n" + ex.Message
+                    + (copy == null ? "" : "\n\nถ้าบันทึกจากหน้านี้ snippets.xml จะถูกแทนที่ด้วยรายการในหน้านี้ สำเนาของไฟล์เดิมเก็บไว้ที่:\n" + copy),
+                    Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             SetDirty(false);
             RefreshList(null);

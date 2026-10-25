@@ -15,7 +15,7 @@ namespace SqlAssist.Setup
 
         private readonly string _version;
         private readonly string _ide;
-        private readonly Func<string> _install;
+        private readonly Func<Task<string>> _install;
         private readonly Label _title = new Label { AutoSize = true, Font = Theme.Ui(12f, FontStyle.Bold), ForeColor = Theme.Text };
         private readonly Label _text = new Label { AutoSize = true, Font = Theme.Ui(9.5f), ForeColor = Theme.Muted };
         private readonly ProgressBar _bar = new ProgressBar { Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 30 };
@@ -27,8 +27,9 @@ namespace SqlAssist.Setup
         /// <summary>Null when the install worked.</summary>
         public string Error { get; private set; }
 
-        /// <param name="install">Runs the install on a worker thread; null on success, otherwise the error text.</param>
-        public InstallOnExitForm(string version, string ide, Func<string> install)
+        /// <param name="install">Starts the install on a worker thread; the task's result is null on success, otherwise the error text.
+        /// The caller keeps the task, so it can wait for it if this window is closed before it ends.</param>
+        public InstallOnExitForm(string version, string ide, Func<Task<string>> install)
         {
             _version = version;
             _ide = ide;
@@ -58,7 +59,7 @@ namespace SqlAssist.Setup
             _title.Text = "กำลังอัปเดต SqlAssist เป็น " + version + "...";
             _text.Text = "ปิด SSMS ครบแล้ว กำลังติดตั้งให้ ใช้เวลาไม่นาน\nอย่าเปิด SSMS จนกว่าหน้าต่างนี้จะบอกว่าเสร็จ";
 
-            // Closing mid-install would only hide the progress; the install itself would carry on.
+            // The user can't close it mid-install; if something else does (End task, sign-out) the install still finishes (Program).
             FormClosing += (s, e) => { if (_busy && e.CloseReason == CloseReason.UserClosing) e.Cancel = true; };
             Shown += async (s, e) => await RunAsync();
         }
@@ -68,9 +69,17 @@ namespace SqlAssist.Setup
         private async Task RunAsync()
         {
             string error;
-            try { error = await Task.Run(_install); }
+            // Not back on the UI context: if the window was closed meanwhile its message loop is gone and a continuation
+            // posted to it would throw. The outcome is handed to the UI thread by hand, and dropped if there is no window.
+            try { error = await _install().ConfigureAwait(false); }
             catch (Exception ex) { error = ex.Message; }
 
+            try { BeginInvoke(new Action(() => ShowOutcome(error))); }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ObjectDisposedException) { /* window already closed */ }
+        }
+
+        private void ShowOutcome(string error)
+        {
             _busy = false;
             Error = error;
             _bar.Visible = false;

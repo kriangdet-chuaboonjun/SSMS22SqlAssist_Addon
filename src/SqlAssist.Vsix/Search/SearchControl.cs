@@ -488,9 +488,11 @@ namespace SqlAssist.Search
                 List<string> databases;
                 if (_allDatabases)
                 {
-                    if (_databases == null) _databases = await SearchIndexLoader.LoadDatabasesAsync(server.ConnectionString, token);
+                    var loaded = _databases ?? await SearchIndexLoader.LoadDatabasesAsync(server.ConnectionString, token);
                     if (token.IsCancellationRequested) return;
-                    databases = _databases;
+                    // UpdateServer clears the list when the server changes: one that finished loading after a switch isn't kept.
+                    if (_server?.ServerKey == server.ServerKey) _databases = loaded;
+                    databases = loaded;
                 }
                 else databases = _selected.ToList();
 
@@ -543,17 +545,20 @@ namespace SqlAssist.Search
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             var server = UpdateServer();
             if (server == null) { SetStatus("Open a query window connected to a server first."); return; }
-            if (_databases == null)
+            var databases = _databases;
+            if (databases == null)
             {
                 try
                 {
-                    _databases = await SearchIndexLoader.LoadDatabasesAsync(server.ConnectionString, CancellationToken.None);
+                    databases = await SearchIndexLoader.LoadDatabasesAsync(server.ConnectionString, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
                     Log.Error("Listing databases of " + server.Server, ex);
-                    _databases = new List<string>();
+                    databases = new List<string>();
                 }
+                // As in SearchAsync: a list for a server that is no longer the current one isn't kept.
+                if (_server?.ServerKey == server.ServerKey) _databases = databases;
             }
 
             var menu = MenuFor(_databasesButton);
@@ -562,7 +567,7 @@ namespace SqlAssist.Search
             menu.Items.Add(new Separator());
 
             // The query window's database first even when it is a system one (master) and not in the list.
-            var names = _databases.ToList();
+            var names = databases.ToList();
             foreach (var extra in _selected.Where(d => !names.Contains(d, StringComparer.OrdinalIgnoreCase)).ToList()) names.Insert(0, extra);
             var dbItems = new List<MenuItem>();
             foreach (var name in names)

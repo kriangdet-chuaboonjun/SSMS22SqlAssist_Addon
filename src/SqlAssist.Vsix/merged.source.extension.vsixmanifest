@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="SqlAssist.9cc4aed8-f2ad-4120-ba6f-222b08aa04a0" Version="1.4.0" Language="en-US" Publisher="SqlAssist" />
+    <Identity Id="SqlAssist.9cc4aed8-f2ad-4120-ba6f-222b08aa04a0" Version="1.4.1" Language="en-US" Publisher="SqlAssist" />
     <DisplayName>SqlAssist</DisplayName>
     <Description xml:space="preserve">IntelliSense and snippets for the SSMS 22 query editor: fuzzy table/column completion with automatic aliases, foreign-key JOIN suggestions, SELECT * expansion on Tab, and Tab-triggered snippets (ssf → SELECT * FROM).</Description>
     <Icon>Resources\icon.png</Icon>

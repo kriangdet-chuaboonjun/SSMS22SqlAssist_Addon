@@ -154,7 +154,11 @@ namespace SqlAssist.Editor
                 await SchemaCache.Instance.GetAsync(target, TimeSpan.FromSeconds(15), System.Threading.CancellationToken.None);
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 _waitingForSchemaAt = -1;
-                if (!_view.IsClosed && _view.Caret.Position.BufferPosition.Position == position) Evaluate();
+                // After a failed load GetAsync returns at once and the switch above doesn't yield on the UI thread, so
+                // Evaluate -> here -> Evaluate would recurse until the stack overflows: only retry with a schema in hand.
+                // shortcut: a load slower than the 15 s wait is picked up on the next caret move, not by a retry here.
+                if (!_view.IsClosed && _view.Caret.Position.BufferPosition.Position == position &&
+                    SchemaCache.Instance.TryGetLoaded(target) != null) Evaluate();
             }).FileAndForget("SqlAssist/ExpansionTipWaitForSchema");
         }
 

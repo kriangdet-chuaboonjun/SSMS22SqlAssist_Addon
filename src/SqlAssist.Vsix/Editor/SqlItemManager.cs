@@ -27,11 +27,37 @@ namespace SqlAssist.Editor
     internal sealed class SqlItemManager : IAsyncCompletionItemManager
     {
         public Task<ImmutableArray<CompletionItem>> SortCompletionListAsync(IAsyncCompletionSession session,
-            AsyncCompletionSessionInitialDataSnapshot data, CancellationToken token) =>
-            Task.FromResult(data.InitialItemList.OrderBy(i => i.SortText, System.StringComparer.OrdinalIgnoreCase).ToImmutableArray());
+            AsyncCompletionSessionInitialDataSnapshot data, CancellationToken token)
+        {
+            try
+            {
+                return Task.FromResult(data.InitialItemList.OrderBy(i => i.SortText, System.StringComparer.OrdinalIgnoreCase).ToImmutableArray());
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Completion sort", ex);
+                return Task.FromResult(data.InitialItemList.ToImmutableArray());
+            }
+        }
 
+        // Runs on every keystroke while a list is open: a failure must not reach the completion broker.
         public Task<FilteredCompletionModel> UpdateCompletionListAsync(IAsyncCompletionSession session,
             AsyncCompletionSessionDataSnapshot data, CancellationToken token)
+        {
+            try
+            {
+                return FilterAsync(session, data);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Completion filter", ex);
+                // An empty list rather than the unfiltered one: nothing wrong can be committed from it.
+                return Task.FromResult(new FilteredCompletionModel(ImmutableArray<CompletionItemWithHighlight>.Empty, 0,
+                    data.SelectedFilters, UpdateSelectionHint.NoChange, centerSelection: true, uniqueItem: null));
+            }
+        }
+
+        private static Task<FilteredCompletionModel> FilterAsync(IAsyncCompletionSession session, AsyncCompletionSessionDataSnapshot data)
         {
             session.Properties.TryGetProperty(typeof(TreeState), out TreeState picker);
             if (picker != null && !picker.IsPicker) picker = null;

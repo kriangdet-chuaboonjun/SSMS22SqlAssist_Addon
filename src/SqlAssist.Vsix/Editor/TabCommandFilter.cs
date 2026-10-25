@@ -139,15 +139,23 @@ namespace SqlAssist.Editor
 
             // The editor's own completion handler normally does both of these; repeating them is harmless and
             // covers an SSMS build where it is not in the chain.
-            var session = _broker.GetSession(_view);
-            if (session != null && !session.IsDismissed)
+            // The character is in the buffer now: a failure here must not reach Exec's catch, which sends it down the chain again.
+            try
             {
-                var caret = _view.Caret.Position.BufferPosition;
-                session.OpenOrUpdate(new CompletionTrigger(CompletionTriggerReason.Insertion, caret.Snapshot, ch), caret, CancellationToken.None);
+                var session = _broker.GetSession(_view);
+                if (session != null && !session.IsDismissed)
+                {
+                    var caret = _view.Caret.Position.BufferPosition;
+                    session.OpenOrUpdate(new CompletionTrigger(CompletionTriggerReason.Insertion, caret.Snapshot, ch), caret, CancellationToken.None);
+                }
+                else if (char.IsLetter(ch) || ch == '_' || ch == '.' || ch == ' ' || ch == '@')
+                {
+                    Trigger(CompletionTriggerReason.Insertion, ch);
+                }
             }
-            else if (char.IsLetter(ch) || ch == '_' || ch == '.' || ch == ' ' || ch == '@')
+            catch (Exception ex)
             {
-                Trigger(CompletionTriggerReason.Insertion, ch);
+                Log.Error("Completion after typing", ex);
             }
             return hr;
         }

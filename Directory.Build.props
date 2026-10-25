@@ -3,6 +3,6 @@
        (see StampVsixVersion in SqlAssist.Vsix.csproj) and the setup exe's file name.
        Bump it for every release so "is the update installed?" has an answer. -->
   <PropertyGroup>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
   </PropertyGroup>
 </Project>
