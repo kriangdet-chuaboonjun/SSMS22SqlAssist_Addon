@@ -23,9 +23,15 @@ namespace SqlAssist.Core.Search
                 case SearchObjectType.Function:
                     urns.Add(db + "/" + Element(item.Type) + Named(item.Name, item.Schema));
                     break;
+                case SearchObjectType.UserDefinedType:
+                    urns.Add(db + "/" + (item.SubKind == "Table" ? "UserDefinedTableType" : "UserDefinedDataType") + Named(item.Name, item.Schema));
+                    break;
                 case SearchObjectType.Column:
                 case SearchObjectType.Trigger:
-                    string child = "/" + (item.Type == SearchObjectType.Column ? "Column" : "Trigger") + "[@Name=" + Quote(item.Name) + "]";
+                case SearchObjectType.Index:
+                case SearchObjectType.Constraint:
+                    // SMO keeps a default under its column, which the item does not record: go to the table instead.
+                    string child = item.SubKind == "Default" ? "" : "/" + ChildElement(item) + "[@Name=" + Quote(item.Name) + "]";
                     var owners = item.ParentType == SearchObjectType.View ? new[] { SearchObjectType.View }
                         : item.ParentType == SearchObjectType.Table ? new[] { SearchObjectType.Table }
                         : new[] { SearchObjectType.Table, SearchObjectType.View };
@@ -44,6 +50,18 @@ namespace SqlAssist.Core.Search
         {
             int slash = urn.LastIndexOf("]/", System.StringComparison.Ordinal);
             return slash < 0 ? urn : urn.Substring(0, slash + 1);
+        }
+
+        // Primary keys and unique constraints are Index nodes in SMO.
+        private static string ChildElement(SearchItem item)
+        {
+            switch (item.Type)
+            {
+                case SearchObjectType.Column: return "Column";
+                case SearchObjectType.Trigger: return "Trigger";
+                case SearchObjectType.Index: return "Index";
+                default: return item.SubKind == "ForeignKey" ? "ForeignKey" : item.SubKind == "Check" ? "Check" : "Index";
+            }
         }
 
         private static string Element(SearchObjectType type)

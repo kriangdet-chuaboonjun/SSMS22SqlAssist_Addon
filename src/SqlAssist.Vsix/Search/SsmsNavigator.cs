@@ -42,8 +42,8 @@ namespace SqlAssist.Search
                 var urns = ObjectUrn.Candidates(rootUrn, item);
                 foreach (var urn in urns)
                     if (await NavigateAsync(nav, urn, token)) return null;
-                // A column or trigger node can be missing (folder not loaded, older SSMS); at least land on its owner.
-                if (item.Type == SearchObjectType.Column || item.Type == SearchObjectType.Trigger)
+                // A column, trigger, index or constraint node can be missing (folder not loaded, older SSMS); at least land on its owner.
+                if (item.Parent != null)
                     foreach (var urn in urns)
                         if (await NavigateAsync(nav, ObjectUrn.Owner(urn), token)) return null;
                 return Fail("Object Explorer could not find " + urns.FirstOrDefault());

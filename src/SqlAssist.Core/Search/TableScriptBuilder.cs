@@ -25,7 +25,15 @@ namespace SqlAssist.Core.Search
     /// Not a full scripter: no defaults, identity, computed columns, indexes or other constraints.</summary>
     public static class TableScriptBuilder
     {
-        public static string Build(string schema, string name, IReadOnlyList<TableColumn> columns, PrimaryKey primaryKey, string newline = "\r\n")
+        public static string Build(string schema, string name, IReadOnlyList<TableColumn> columns, PrimaryKey primaryKey, string newline = "\r\n") =>
+            Build("CREATE TABLE ", schema, name, columns, primaryKey, newline);
+
+        /// <summary>A user-defined table type: the same body as <see cref="Build(string, string, IReadOnlyList{TableColumn}, PrimaryKey, string)"/>.</summary>
+        public static string BuildTableType(string schema, string name, IReadOnlyList<TableColumn> columns, PrimaryKey primaryKey, string newline = "\r\n") =>
+            Build("CREATE TYPE ", schema, name, columns, primaryKey, newline, " AS TABLE");
+
+        private static string Build(string create, string schema, string name, IReadOnlyList<TableColumn> columns, PrimaryKey primaryKey,
+            string newline, string afterName = "")
         {
             var lines = new List<string>();
             foreach (var c in columns)
@@ -39,7 +47,7 @@ namespace SqlAssist.Core.Search
             }
 
             var sb = new StringBuilder();
-            sb.Append("CREATE TABLE ").Append(Bracket(schema)).Append('.').Append(Bracket(name)).Append(" (").Append(newline);
+            sb.Append(create).Append(Bracket(schema)).Append('.').Append(Bracket(name)).Append(afterName).Append(" (").Append(newline);
             sb.Append(string.Join("," + newline, lines));
             if (lines.Count > 0) sb.Append(newline);
             sb.Append(");");

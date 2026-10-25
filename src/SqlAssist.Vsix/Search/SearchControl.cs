@@ -28,7 +28,7 @@ namespace SqlAssist.Search
             var item = match.Item;
             Name = item.Name;
             Schema = item.Schema ?? "";
-            Type = item.Type.ToString();
+            Type = SearchControl.TypeLabel(item);
             Parent = item.Parent ?? "";
             Database = item.Database;
             MatchedIn = match.Location == (MatchLocation.Name | MatchLocation.Definition) ? "Name, Definition" : match.Location.ToString();
@@ -56,8 +56,16 @@ namespace SqlAssist.Search
         {
             (SearchObjectType.Schema, "Schema"), (SearchObjectType.Table, "Table"), (SearchObjectType.View, "View"),
             (SearchObjectType.Procedure, "Procedure"), (SearchObjectType.Function, "Function"),
-            (SearchObjectType.Trigger, "Trigger"), (SearchObjectType.Column, "Column"),
+            (SearchObjectType.Trigger, "Trigger"), (SearchObjectType.Column, "Column"), (SearchObjectType.Index, "Index"),
+            (SearchObjectType.Constraint, "Constraint"), (SearchObjectType.UserDefinedType, "User-defined type"),
         };
+
+        /// <summary>The Type column's text: "User-defined type", "Constraint (Check)".</summary>
+        internal static string TypeLabel(SearchItem item)
+        {
+            string label = TypeChoices.FirstOrDefault(c => c.type == item.Type).label ?? item.Type.ToString();
+            return item.SubKind == null ? label : label + " (" + item.SubKind + ")";
+        }
 
         private readonly SearchSettings _settings = new SearchSettings();
         private readonly ObservableCollection<ResultRow> _results = new ObservableCollection<ResultRow>();
@@ -296,7 +304,7 @@ namespace SqlAssist.Search
 
             foreach (var (title, path, width) in new[]
             {
-                ("Name", nameof(ResultRow.Name), 220.0), ("Schema", nameof(ResultRow.Schema), 90.0), ("Type", nameof(ResultRow.Type), 90.0),
+                ("Name", nameof(ResultRow.Name), 220.0), ("Schema", nameof(ResultRow.Schema), 90.0), ("Type", nameof(ResultRow.Type), 140.0),
                 ("Parent", nameof(ResultRow.Parent), 160.0), ("Database", nameof(ResultRow.Database), 130.0), ("Matched in", nameof(ResultRow.MatchedIn), 120.0),
             })
             {
@@ -374,7 +382,8 @@ namespace SqlAssist.Search
             var item = SelectedItem;
             if (item == null) return;
             string name = item.Schema == null ? TableScriptBuilder.Bracket(item.Name)
-                : item.Type == SearchObjectType.Column ? TableScriptBuilder.Bracket(item.Name)
+                : item.Type == SearchObjectType.Column || item.Type == SearchObjectType.Index || item.Type == SearchObjectType.Constraint
+                    ? TableScriptBuilder.Bracket(item.Name)
                 : TableScriptBuilder.Bracket(item.Schema) + "." + TableScriptBuilder.Bracket(item.Name);
             try { Clipboard.SetText(name); } catch (Exception ex) { Log.Error("Copy name", ex); }
         }

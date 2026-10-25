@@ -184,7 +184,7 @@ schema จะถูกโหลดครั้งแรกที่ใช้ง�
 
 - **ค้นขณะพิมพ์:** พิมพ์อย่างน้อย 2 ตัวอักษรแล้วผลจะขึ้นเอง (กด Enter เพื่อค้นทันที หรือกด ↓ เพื่อไปที่ตารางผลลัพธ์)
 - **ค้นจากอะไร:** ชื่อ object และข้อความใน definition ของ view / procedure / function / trigger ส่วนชื่อตารางและคอลัมน์จะค้นจากชื่ออย่างเดียว
-- **ชนิด object (dropdown "All object types"):** ติ๊กเลือก Schema, Table, View, Procedure, Function, Trigger, Column
+- **ชนิด object (dropdown "All object types"):** ติ๊กเลือก Schema, Table, View, Procedure, Function, Trigger, Column, Index, Constraint (primary key, unique, foreign key, check, default) และ User-defined type (alias type และ table type) ซึ่ง 3 ชนิดหลังค้นจากชื่ออย่างเดียว และ preview เป็น script แบบย่อ (`CREATE INDEX`, `ALTER TABLE ... ADD CONSTRAINT`, `CREATE TYPE`)
 - **ตัวเลือกการค้น (ปุ่ม ⚙):** Match case, Match whole word และ Use wildcards (`*` = อักษรกี่ตัวก็ได้ในบรรทัดเดียวกัน, `?` = อักษร 1 ตัว) ถ้าไม่ติ๊กอะไรเลยจะค้นแบบ "มีคำนี้อยู่" และไม่สนตัวพิมพ์เล็กใหญ่
 - **Database (dropdown):** ค่าเริ่มต้นคือ database ปัจจุบัน เลือกได้หลายตัวหรือเลือก **All databases** (ไม่รวม system database) ระบบจะโหลดทีละ database และแสดงผลทันทีที่เจอ ส่วน database ที่ offline หรือไม่มีสิทธิ์จะถูกข้ามและบันทึกไว้ใน log
 - **Server (dropdown):** ค่าเริ่มต้นคือ "Active query window" (ใช้ server ของหน้าต่าง query ที่ active อยู่) หรือเลือก server อื่นที่เคยต่อในรอบนี้ก็ได้ ถ้าหน้าต่าง query ที่ active เปลี่ยนไปต่อ server อื่น ระบบจะกลับไปใช้ server ของหน้าต่างนั้นเอง
@@ -225,7 +225,7 @@ snippet เก็บอยู่ที่ไฟล์ `%APPDATA%\SqlAssist\snipp
 - แบ่ง statement ด้วย `;`, `GO` หรือบรรทัดว่าง ถ้าเขียนหลาย query ติดกันโดยไม่มีตัวคั่น ตารางของ query อื่นอาจโผล่มาในรายการด้วย
 - คอลัมน์ของ table-valued function มาจาก function ใน database เท่านั้น function ในตัวของ SQL Server (`STRING_SPLIT`, `OPENJSON` ฯลฯ) ยังไม่รู้จัก และ TVF ที่เพิ่งสร้างใหม่ต้องกด **Ctrl+Shift+R** ก่อน
 - คอลัมน์ของ CTE ที่คำนวณจาก expression (เช่น `YEAR(OrderDate) AS SalesYear`) จะไม่มีชนิดข้อมูล รู้ชนิดเฉพาะคอลัมน์ที่ดึงมาจากตารางตรง ๆ
-- Search: ยังไม่ค้นข้อมูลในตาราง (data search), index, constraint และ user-defined type และ preview หรือ script ของตารางเป็น `CREATE TABLE` แบบย่อ ไม่ใช่ script เต็มแบบของ SSMS ส่วน definition ที่เปิดใน query window เป็นข้อความ `CREATE` ตามที่ SQL Server เก็บไว้ ถ้าจะแก้ต้องเปลี่ยนเป็น `ALTER` เอง
+- Search: ยังไม่ค้นข้อมูลในตาราง (data search) ยังไม่รวม columnstore / XML / spatial index ส่วน constraint ค้นจากชื่อ ไม่ได้ค้นจากเงื่อนไขข้างใน และ preview หรือ script ของตารางเป็น `CREATE TABLE` แบบย่อ ไม่ใช่ script เต็มแบบของ SSMS ส่วน definition ที่เปิดใน query window เป็นข้อความ `CREATE` ตามที่ SQL Server เก็บไว้ ถ้าจะแก้ต้องเปลี่ยนเป็น `ALTER` เอง
 - Search: ถ้าไม่มีหน้าต่าง query ที่ active อยู่ จะใช้ connection ล่าสุดที่เคยเห็น
 
 ## เมื่อมีปัญหา

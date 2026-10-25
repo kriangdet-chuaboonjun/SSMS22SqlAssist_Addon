@@ -65,6 +65,19 @@ namespace SqlAssist.Core.Tests.Search
         public void Wildcards_WholeWordLimitsToIdentifier() =>
             Assert.Equal(new[] { "OrderId", "Orders" }, Hits(M("Order*", wholeWord: true, wildcards: true), "OrderId Orders"));
 
+        [Fact]
+        public void TypeFilterExcludesIndexes() =>
+            Assert.Null(M("IX_Orders", types: SearchObjectType.Table).Match(new SearchItem("db", "dbo", "IX_Orders", SearchObjectType.Index, "Orders")));
+
+        [Fact]
+        public void AllIncludesNewTypes()
+        {
+            var m = M("Phone");
+            Assert.NotNull(m.Match(new SearchItem("db", "dbo", "Phone", SearchObjectType.UserDefinedType, subKind: "Alias")));
+            Assert.NotNull(m.Match(new SearchItem("db", "dbo", "CK_Phone", SearchObjectType.Constraint, "T", subKind: "Check")));
+            Assert.NotNull(m.Match(new SearchItem("db", "dbo", "IX_Phone", SearchObjectType.Index, "T")));
+        }
+
         [Theory]
         [InlineData("")]
         [InlineData("a")]

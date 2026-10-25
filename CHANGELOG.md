@@ -13,6 +13,7 @@
 - **ตามคำสั่ง `USE`:** ถ้าในสคริปต์มี `USE ชื่อdb` อยู่เหนือ caret รายการ completion, `SELECT *` + Tab, การขยาย statement ด้วย Tab และการชี้เมาส์ จะใช้ตารางของ database นั้น ไม่ต้องรันสคริปต์หรือเปลี่ยน dropdown ก่อน
 - **ชี้เมาส์ที่คอลัมน์และ procedure / function:** ชี้ที่ `wr.ReqId` หรือ `ReqId` จะเห็นชนิดข้อมูล, primary key / foreign key และคำอธิบาย (MS_Description) ชี้ที่ชื่อหลัง `EXEC` หรือ function ที่เรียกอยู่ (`dbo.fnTax(...)`) จะเห็น parameter ทุกตัว (เดิมชี้ได้แค่ชื่อตารางกับ alias)
 - **F12 Go to Definition:** วาง caret ที่ชื่อ object แล้วกด F12 (หรือคลิกขวา › Go To Definition) ตารางจะเปิดใน Object Explorer ส่วน view / procedure / function / trigger จะเปิด script ในหน้าต่าง query ใหม่ที่ขึ้นต้นด้วย `USE [database]` (ไม่รันให้)
+- **Search หา index, constraint และ user-defined type:** เมนูชนิด object มี Index, Constraint (primary key, unique, foreign key, check, default) และ User-defined type (alias type, table type) เพิ่มขึ้นมา ค้นได้จากชื่อ preview เป็น script แบบย่อ และกดไปที่ Object Explorer ได้ (ถ้าหา node ของตัวมันไม่เจอจะไปที่ตารางเจ้าของ) คอลัมน์ Type บอกชนิดย่อยด้วย เช่น "Constraint (Check)"
 
 ## [1.4.1] - 2026-10-25
 

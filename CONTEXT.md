@@ -19,11 +19,11 @@ The in-memory snapshot of one database's searchable objects, with names and modu
 _Avoid_: Cache (when you mean what is searched), catalog
 
 **Search Item**:
-One object in a Search Index: a schema, table, view, procedure, function, trigger or column, with its database, schema, owning object and definition.
+One object in a Search Index: a schema, table, view, procedure, function, trigger, column, index, constraint or user-defined type, with its database, schema, owning object and definition.
 _Avoid_: Result, entry, row
 
 **Object Type**:
-The kind of Search Item (Schema, Table, View, Procedure, Function, Trigger, Column). The user filters the search by it.
+The kind of Search Item (Schema, Table, View, Procedure, Function, Trigger, Column, Index, Constraint, User-defined type). The user filters the search by it. A constraint or user-defined type also has a sub-kind (Check, Default, ForeignKey, PrimaryKey, Unique; Alias, Table).
 _Avoid_: Data type (that is a column's SQL type), type
 
 **Definition**:

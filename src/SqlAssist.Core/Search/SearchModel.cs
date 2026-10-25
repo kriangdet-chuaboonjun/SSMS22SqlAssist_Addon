@@ -14,7 +14,10 @@ namespace SqlAssist.Core.Search
         Function = 16,
         Trigger = 32,
         Column = 64,
-        All = Schema | Table | View | Procedure | Function | Trigger | Column,
+        Index = 128,
+        Constraint = 256,
+        UserDefinedType = 512,
+        All = Schema | Table | View | Procedure | Function | Trigger | Column | Index | Constraint | UserDefinedType,
     }
 
     [Flags]
@@ -30,10 +33,10 @@ namespace SqlAssist.Core.Search
     {
         public SearchItem(string database, string schema, string name, SearchObjectType type,
             string parent = null, string definition = null, string script = null,
-            SearchObjectType parentType = SearchObjectType.None)
+            SearchObjectType parentType = SearchObjectType.None, string subKind = null)
         {
             Database = database; Schema = schema; Name = name; Type = type;
-            Parent = parent; Definition = definition; Script = script; ParentType = parentType;
+            Parent = parent; Definition = definition; Script = script; ParentType = parentType; SubKind = subKind;
         }
 
         public string Database { get; }
@@ -41,7 +44,9 @@ namespace SqlAssist.Core.Search
         public string Schema { get; }
         public string Name { get; }
         public SearchObjectType Type { get; }
-        /// <summary>The owning table or view of a Column or Trigger; null otherwise.</summary>
+        /// <summary>Constraint: PrimaryKey, Unique, ForeignKey, Check or Default. UserDefinedType: Alias or Table. Null otherwise.</summary>
+        public string SubKind { get; }
+        /// <summary>The owning table or view of a Column, Trigger, Index or Constraint; null otherwise.</summary>
         public string Parent { get; }
         /// <summary>Table or View when <see cref="Parent"/> is set and known; None otherwise.</summary>
         public SearchObjectType ParentType { get; }

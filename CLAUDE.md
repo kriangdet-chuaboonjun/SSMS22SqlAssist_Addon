@@ -124,6 +124,6 @@ after a CTE (`WITH x AS (...)` ⏎⏎ `SELECT`). CTE and derived-table columns c
 (`DerivedTable`, linked to `TableRef.Derived`; `SchemaModel.Find(TableRef)` resolves them, borrowing types and
 MS_Description from the columns they pass through). TVF columns are loaded with the schema and hang off `DbRoutine.Columns`
 (`SchemaModel.FindFunctionTable`); built-in TVFs (STRING_SPLIT, OPENJSON) are unknown and skipped. Known v1 gaps (don't
-assume they work): data search, index/constraint/UDT search. Editor features get their connection from
+assume they work): data search, columnstore/XML/spatial indexes in Search, searching inside constraint definitions. Editor features get their connection from
 `EditorConnection.Get(window)`: the query window's, switched by the last `USE` inside the `TextWindow` above the caret
 (`SqlUseStatement`); `$DB$` in snippets stays the window's database.
