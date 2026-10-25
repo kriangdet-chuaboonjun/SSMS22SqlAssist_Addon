@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Bash reads CRLF line ends as part of each command
+*.sh text eol=lf
