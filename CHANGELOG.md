@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-26
+
 ### แก้ไข
 - **function ในตัวของ SQL Server ขึ้นในรายการ completion แล้ว:** พิมพ์ `rep` จะเห็น `REPLACE` (รวมถึง `SUBSTRING`, `CHARINDEX`, `LEN`, `DATEPART`, `FORMAT`, `STRING_AGG`, `IIF` ฯลฯ) เดิมรายการมีแค่บางตัว เช่น `COUNT`, `CAST`, `GETDATE`
 
