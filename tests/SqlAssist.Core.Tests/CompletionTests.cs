@@ -34,6 +34,13 @@ namespace SqlAssist.Core.Tests
         [Fact]
         public void ShorterPrefixMatchRanksFirst() =>
             Assert.True(FuzzyMatcher.Score("ord", "Orders") > FuzzyMatcher.Score("ord", "OrderDetails"));
+
+        [Fact]
+        public void CompletionKeywordsIncludeBuiltInFunctionsOnce()
+        {
+            Assert.Contains("REPLACE", SqlKeywords.CompletionKeywords);
+            Assert.Equal(SqlKeywords.CompletionKeywords.Length, SqlKeywords.CompletionKeywords.Distinct().Count());
+        }
     }
 
     public class AliasGeneratorTests

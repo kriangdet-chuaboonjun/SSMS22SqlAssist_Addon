@@ -12,19 +12,7 @@ namespace SqlAssist.Core.Formatting
     /// Words after a dot are names, always.</summary>
     internal static class KeywordCaser
     {
-        private static readonly HashSet<string> Functions = new HashSet<string>
-        {
-            "COUNT", "COUNT_BIG", "SUM", "AVG", "MIN", "MAX", "STDEV", "STDEVP", "VAR", "VARP", "CAST", "TRY_CAST", "PARSE", "TRY_PARSE",
-            "ISNULL", "IIF", "CHOOSE", "GETDATE", "GETUTCDATE", "SYSDATETIME", "SYSUTCDATETIME", "SYSDATETIMEOFFSET", "DATEADD", "DATEDIFF",
-            "DATEDIFF_BIG", "DATEPART", "DATENAME", "DATEFROMPARTS", "EOMONTH", "YEAR", "MONTH", "DAY", "LEN", "DATALENGTH", "SUBSTRING",
-            "LTRIM", "RTRIM", "TRIM", "UPPER", "LOWER", "REPLACE", "REPLICATE", "REVERSE", "STUFF", "CHARINDEX", "PATINDEX", "CONCAT",
-            "CONCAT_WS", "FORMAT", "STRING_AGG", "STRING_SPLIT", "ABS", "CEILING", "FLOOR", "ROUND", "POWER", "SQRT", "SIGN", "RAND",
-            "ROW_NUMBER", "RANK", "DENSE_RANK", "NTILE", "LAG", "LEAD", "FIRST_VALUE", "LAST_VALUE", "NEWID", "NEWSEQUENTIALID",
-            "SCOPE_IDENTITY", "IDENT_CURRENT", "OBJECT_ID", "OBJECT_NAME", "DB_NAME", "DB_ID", "SCHEMA_NAME", "COL_LENGTH", "ISNUMERIC",
-            "ISDATE", "ISJSON", "JSON_VALUE", "JSON_QUERY", "JSON_MODIFY", "OPENJSON", "CHECKSUM", "BINARY_CHECKSUM", "HASHBYTES",
-            "ERROR_MESSAGE", "ERROR_NUMBER", "ERROR_SEVERITY", "ERROR_STATE", "ERROR_LINE", "ERROR_PROCEDURE", "XACT_STATE", "APP_NAME",
-            "HOST_NAME", "SUSER_SNAME", "SUSER_NAME", "USER_NAME",
-        };
+        private static readonly HashSet<string> Functions = SqlKeywords.BuiltInFunctions;
 
         private static readonly HashSet<string> Types = new HashSet<string>
         {
