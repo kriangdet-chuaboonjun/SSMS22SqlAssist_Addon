@@ -7,7 +7,7 @@
 param([switch]$Draft, [switch]$UpdateNotes, [string]$ForVersion)
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$repo = "kriangdet/SSMS22SqlAssist_Addon"   # keep in sync with ReleaseInfo.Repository
+$repo = "kriangdet-chuaboonjun/SSMS22SqlAssist_Addon"   # keep in sync with ReleaseInfo.Repository
 if ($ForVersion -and -not $UpdateNotes) { throw "-ForVersion only goes with -UpdateNotes." }
 $version = if ($ForVersion) { $ForVersion } else { ([xml](Get-Content (Join-Path $root "Directory.Build.props"))).Project.PropertyGroup.Version }
 $tag = "v$version"

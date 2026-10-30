@@ -1,12 +1,18 @@
 # Changelog
 
 บันทึกว่าแต่ละเวอร์ชันเพิ่มหรือแก้อะไร ส่วนของเวอร์ชันไหน `publish-release.ps1` จะเอาไปแสดงเป็นรายละเอียดในหน้า
-[GitHub Releases](https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases) ของเวอร์ชันนั้น
+[GitHub Releases](https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases) ของเวอร์ชันนั้น
 
 ทุกครั้งที่แก้โค้ด ให้เขียนเพิ่มไว้ใต้ `## [Unreleased]` ก่อน พอปรับเวอร์ชันใน `Directory.Build.props` แล้วก็เปลี่ยนหัวข้อเป็น
 `## [x.y.z] - YYYY-MM-DD` แล้วเปิด `## [Unreleased]` อันใหม่ไว้ด้านบน
 
 ## [Unreleased]
+
+### เปลี่ยน
+
+- ย้าย repo ไปอยู่ใน organization `kriangdet-chuaboonjun` แล้ว การเช็กและดาวน์โหลดอัปเดตจึงไปที่
+  `github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon` ใครใช้เวอร์ชัน 1.4.3 หรือเก่ากว่า ระบบยังแจ้งเตือนเวอร์ชันใหม่ได้
+  แต่จะดาวน์โหลดและติดตั้งให้อัตโนมัติไม่ได้ ต้องโหลด `SqlAssistSetup-*.exe` จากหน้า Releases มาติดตั้งเองหนึ่งครั้ง
 
 ## [1.4.3] - 2026-10-26
 

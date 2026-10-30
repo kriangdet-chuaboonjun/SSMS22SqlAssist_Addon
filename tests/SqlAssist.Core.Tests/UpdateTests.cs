@@ -6,12 +6,12 @@ namespace SqlAssist.Core.Tests
 {
     public class UpdateTests
     {
-        private const string Download = "https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases/download/v1.3.0/";
+        private const string Download = "https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases/download/v1.3.0/";
         private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
         private static string Json(string tag = "v1.3.0", string assets = null, bool prerelease = false) =>
             "{\"tag_name\":\"" + tag + "\",\"name\":\"SqlAssist " + tag + "\",\"draft\":false,\"prerelease\":" + (prerelease ? "true" : "false") + "," +
-            "\"html_url\":\"https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases/tag/" + tag + "\",\"body\":\"notes\"," +
+            "\"html_url\":\"https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases/tag/" + tag + "\",\"body\":\"notes\"," +
             "\"assets\":[" + (assets ?? "{\"name\":\"SqlAssistSetup-1.3.0.exe\",\"browser_download_url\":\"" + Download + "SqlAssistSetup-1.3.0.exe\",\"digest\":\"sha256:" + Hash.ToUpperInvariant() + "\",\"size\":1}") + "]}";
 
         [Theory]
@@ -43,7 +43,7 @@ namespace SqlAssist.Core.Tests
         {
             var r = ReleaseInfo.Parse(Json());
             Assert.Equal(new Version("1.3.0"), r.Version);
-            Assert.Equal("https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases/tag/v1.3.0", r.PageUrl);
+            Assert.Equal("https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases/tag/v1.3.0", r.PageUrl);
             Assert.Equal(Download + "SqlAssistSetup-1.3.0.exe", r.SetupUrl);
             Assert.Equal("SqlAssistSetup-1.3.0.exe", r.SetupFileName);
             Assert.Equal(Hash, r.SetupSha256);

@@ -44,7 +44,7 @@ add-on ขนาดเล็กสำหรับ SQL Server Management Studio 2
 - ก่อนออกเวอร์ชันใหม่ ให้แก้เลขเวอร์ชันที่ `Directory.Build.props` ที่เดียว แล้วรัน `.\build-setup.ps1`
 
 ### อัปเดตออนไลน์ (ตั้งแต่ 1.3.0)
-- ตอนเปิด SSMS ระบบจะเช็ก [GitHub Releases](https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases) วันละครั้ง ถ้ามีเวอร์ชันใหม่จะขึ้นแถบแจ้งเตือนด้านบนหน้าต่าง SSMS
+- ตอนเปิด SSMS ระบบจะเช็ก [GitHub Releases](https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases) วันละครั้ง ถ้ามีเวอร์ชันใหม่จะขึ้นแถบแจ้งเตือนด้านบนหน้าต่าง SSMS
 - เช็กเองได้ที่ **Tools › SqlAssist › Check for Updates...**
 - ในแถบแจ้งเตือนมีปุ่มให้เลือก:
   - **Install when SSMS closes** (ตั้งแต่ 1.3.3) — ดาวน์โหลดและตรวจ SHA-256 ไว้ก่อน แล้วรอเงียบ ๆ อยู่เบื้องหลัง พอปิด SSMS ครบทุกหน้าต่างจะติดตั้งให้เอง เปิด SSMS ครั้งถัดไปก็ได้เวอร์ชันใหม่ (แถบสถานะขึ้น "SqlAssist updated to ...") ถ้าติดตั้งไม่สำเร็จจะแจ้งตอนเปิด SSMS ถ้า restart เครื่องก่อนได้ปิด SSMS ระบบจะตั้งรอใหม่ให้ตอนเปิด SSMS
@@ -52,7 +52,7 @@ add-on ขนาดเล็กสำหรับ SQL Server Management Studio 2
   - **What's new** — เปิดหน้า release เพื่อดูว่ามีอะไรใหม่
   - **Skip this version** — ไม่ต้องเตือนเวอร์ชันนี้อีก
   - **Don't check automatically** — ปิดการเช็กอัตโนมัติ (เมนู Check for Updates ยังใช้ได้ตามปกติ) ถ้าอยากเปิดกลับ ให้ลบไฟล์ `%LOCALAPPDATA%\SqlAssist\update.txt`
-- ดูว่าแต่ละเวอร์ชันเพิ่มหรือแก้อะไรได้ที่ [CHANGELOG.md](CHANGELOG.md) หรือหน้า [Releases](https://github.com/kriangdet/SSMS22SqlAssist_Addon/releases) (ลิงก์ **What's new** ในแถบแจ้งเตือน)
+- ดูว่าแต่ละเวอร์ชันเพิ่มหรือแก้อะไรได้ที่ [CHANGELOG.md](CHANGELOG.md) หรือหน้า [Releases](https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases) (ลิงก์ **What's new** ในแถบแจ้งเตือน)
 - ออกเวอร์ชันใหม่ (สำหรับนักพัฒนา): เขียนสิ่งที่เปลี่ยนลง `CHANGELOG.md` → แก้เวอร์ชัน → `.\build-setup.ps1` → commit แล้ว push → ตั้งค่า `$env:GITHUB_TOKEN` → `.\publish-release.ps1` (ข้อความใน release มาจาก CHANGELOG ของเวอร์ชันนั้น)
 
 - ไฟล์ exe ไฟล์เดียวมี add-on อยู่ข้างในแล้ว จะก๊อปไปเครื่องอื่นที่มี SSMS 22 ก็ใช้ได้เลย ไม่ต้องลงโปรแกรมเพิ่ม

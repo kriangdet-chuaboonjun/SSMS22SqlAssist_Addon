@@ -12,7 +12,7 @@ namespace SqlAssist.Setup
     /// The action button stays disabled while SSMS is open (checked every second, so it unlocks by itself).</summary>
     internal sealed class SetupForm : Form
     {
-        private const string ChangesUrl = "https://github.com/kriangdet/SSMS22SqlAssist_Addon/commits/main";
+        private const string ChangesUrl = "https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/commits/main";
 
         // Layout in 96-dpi pixels; D() scales to the screen.
         private const int SidebarWidth = 230, ContentWidth = 630, WindowHeight = 580, Pad = 36, ButtonHeight = 36;

@@ -12,7 +12,7 @@ namespace SqlAssist.Core.Update
     /// <summary>The latest GitHub release, as far as updating cares: its version, page and the setup exe to download.</summary>
     public sealed class ReleaseInfo
     {
-        public const string Repository = "kriangdet/SSMS22SqlAssist_Addon";
+        public const string Repository = "kriangdet-chuaboonjun/SSMS22SqlAssist_Addon";
         public const string LatestApiUrl = "https://api.github.com/repos/" + Repository + "/releases/latest";
         public const string ReleasesPageUrl = "https://github.com/" + Repository + "/releases";
         /// <summary>Downloads are only taken from this repository's own release assets.</summary>

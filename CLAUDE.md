@@ -96,7 +96,7 @@ Three projects (`SqlAssist.sln`) plus tests:
   - `Settings/` — `SettingsProvider` (`%APPDATA%\SqlAssist\settings.xml`, re-read when the file changes) and `OptionsWindow`.
     `DialogHost` shows WPF windows owned by SSMS's main window; the windows are plain `Window`s so they can be rendered
     outside SSMS to check their layout (keep `ThreadHelper.ThrowIfNotOnUIThread` out of their constructors).
-  - `Update/` — online update: `UpdateService` reads GitHub's `releases/latest` for `kriangdet/SSMS22SqlAssist_Addon`
+  - `Update/` — online update: `UpdateService` reads GitHub's `releases/latest` for `kriangdet-chuaboonjun/SSMS22SqlAssist_Addon`
     (daily on startup via background `ProvideAutoLoad`, or Tools › SqlAssist › Check for Updates), shows
     `UpdateInfoBar`, and on request downloads the release's `SqlAssistSetup-*.exe` (SHA-256 checked against the
     asset's GitHub digest) and starts it — the setup window then waits for SSMS to close. Version/asset parsing and
