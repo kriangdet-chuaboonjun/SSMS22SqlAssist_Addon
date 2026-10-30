@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-10-30
+
+### เพิ่ม
+
+- **ข้อความแนะนำ Tab ใต้ชื่อตารางหลัง `INSERT INTO t` และ `UPDATE t`:** เหมือนที่มีอยู่แล้วใต้ `*` และ `EXEC p` จะขึ้น
+  "Press Tab to insert columns and VALUES" / "Press Tab to insert SET and WHERE" เฉพาะเมื่อ Tab ขยายได้จริง (ตารางมีในฐานข้อมูล
+  มีคอลัมน์ให้เติม และยังไม่ได้เขียนรายชื่อคอลัมน์ / `VALUES` / `SET` ต่อท้าย)
+- **ข้อความแนะนำ Tab หลัง `ALTER PROCEDURE p` / `ALTER FUNCTION f` / `ALTER VIEW v`:** ขึ้น "Press Tab to insert the current definition"
+  เมื่อ SqlAssist รู้จักอ็อบเจกต์นั้น (ตรวจจาก schema ที่โหลดไว้ ไม่ได้ต่อ server เพิ่มทุกครั้งที่ขยับ caret) `ALTER TRIGGER` ยังไม่มีข้อความนี้
+  และ procedure ที่เข้ารหัสไว้ซึ่งอ่านนิยามไม่ได้ จะยังเห็นข้อความแต่ Tab ไม่ทำอะไร
+
 ## [1.5.1] - 2026-10-30
 
 ### เพิ่ม

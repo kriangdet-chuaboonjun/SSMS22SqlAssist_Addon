@@ -29,9 +29,9 @@ namespace SqlAssist.Editor
         public void TextViewCreated(IWpfTextView textView) => new ExpansionTip(textView, ToolTips, Broker);
     }
 
-    /// <summary>Shows "Press Tab to expand N columns" under a "*", or "Press Tab to insert list of parameters" under the
-    /// procedure name in "EXEC p" — only where Tab would do it, so the hint never promises an expansion that Tab will
-    /// not do. Re-checked a moment after the caret settles.</summary>
+    /// <summary>Shows "Press Tab to expand N columns" under a "*", "Press Tab to insert list of parameters" under the
+    /// procedure name in "EXEC p", and the INSERT / UPDATE / ALTER hint under the object name — only where Tab would
+    /// do it, so the hint never promises an expansion that Tab will not do. Re-checked a moment after the caret settles.</summary>
     internal sealed class ExpansionTip
     {
         private readonly IWpfTextView _view;
@@ -88,9 +88,8 @@ namespace SqlAssist.Editor
                 var caret = _view.Caret.Position.BufferPosition;
                 var window = TextWindow.Around(caret.Snapshot, caret.Position);
                 var star = SqlContextAnalyzer.FindStar(window.Text, window.Caret);
-                var exec = star == null ? StatementExpander.Find(window.Text, window.Caret) : null;
-                if (exec != null && exec.Kind != ExpansionKind.Exec) exec = null;
-                var target = star == null && exec == null ? null : EditorConnection.Get(window);
+                var stmt = star == null ? StatementExpander.Find(window.Text, window.Caret) : null;
+                var target = star == null && stmt == null ? null : EditorConnection.Get(window);
                 if (target == null)
                 {
                     Hide();
@@ -122,15 +121,44 @@ namespace SqlAssist.Editor
                 }
                 else
                 {
-                    // Mirrors the EXEC template: Tab only writes a parameter list for a procedure that has parameters.
-                    if (!StatementExpander.HasExecTemplate(schema.FindRoutine(exec.Schema, exec.Name)))
+                    // Mirrors the templates: Tab writes nothing for an unknown table/procedure or one with nothing to fill in.
+                    if (stmt.Kind == ExpansionKind.Exec)
                     {
-                        Hide();
-                        return;
+                        if (!StatementExpander.HasExecTemplate(schema.FindRoutine(stmt.Schema, stmt.Name)))
+                        {
+                            Hide();
+                            return;
+                        }
+                        action = "insert list of parameters";
                     }
-                    start = window.Offset + exec.NameStart;
-                    span = new SnapshotSpan(caret.Snapshot, start, exec.NameEnd - exec.NameStart);
-                    action = "insert list of parameters";
+                    else if (stmt.Kind == ExpansionKind.Alter)
+                    {
+                        // Tab reads the definition from the server, which a hint must not do on every caret move: it only checks the
+                        // object is known (triggers aren't in the schema cache, so they get no hint). A definition Tab cannot read
+                        // (an encrypted procedure) still shows the hint.
+                        if (!IsKnownAlterTarget(stmt, schema))
+                        {
+                            Hide();
+                            return;
+                        }
+                        action = "insert the current definition";
+                    }
+                    else
+                    {
+                        var table = schema.Find(stmt.Schema, stmt.Name);
+                        bool insert = stmt.Kind == ExpansionKind.Insert;
+                        var template = table == null ? null
+                            : insert ? StatementExpander.BuildInsert(table, "", "\n")
+                            : StatementExpander.BuildUpdate(table, "", "\n");
+                        if (template == null)
+                        {
+                            Hide();
+                            return;
+                        }
+                        action = insert ? "insert columns and VALUES" : "insert SET and WHERE";
+                    }
+                    start = window.Offset + stmt.NameStart;
+                    span = new SnapshotSpan(caret.Snapshot, start, stmt.NameEnd - stmt.NameStart);
                 }
 
                 if (_presenter != null && _shownAt == start) return; // already showing here
@@ -160,6 +188,23 @@ namespace SqlAssist.Editor
                 if (!_view.IsClosed && _view.Caret.Position.BufferPosition.Position == position &&
                     SchemaCache.Instance.TryGetLoaded(target) != null) Evaluate();
             }).FileAndForget("SqlAssist/ExpansionTipWaitForSchema");
+        }
+
+        private static bool IsKnownAlterTarget(ExpansionTarget stmt, SchemaModel schema)
+        {
+            switch (stmt.ObjectType)
+            {
+                case "PROCEDURE":
+                case "PROC":
+                    return schema.FindRoutine(stmt.Schema, stmt.Name)?.Kind == RoutineKind.Procedure;
+                case "FUNCTION":
+                    var function = schema.FindRoutine(stmt.Schema, stmt.Name);
+                    return function != null && function.Kind != RoutineKind.Procedure;
+                case "VIEW":
+                    return schema.Find(stmt.Schema, stmt.Name)?.IsView == true;
+                default:
+                    return false;
+            }
         }
 
         private static int CountColumns(StarContext star, SchemaModel schema)
