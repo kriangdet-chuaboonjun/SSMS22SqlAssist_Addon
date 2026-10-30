@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.Composition;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.VisualStudio;
@@ -272,7 +273,17 @@ namespace SqlAssist.Editor
                 return true;
             }
 
-            var schema = ThreadHelper.JoinableTaskFactory.Run(() => SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None));
+            SqlAssist.Core.Schema.SchemaModel schema;
+            try
+            {
+                schema = ThreadHelper.JoinableTaskFactory.Run(() => SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None));
+            }
+            catch (Exception ex)
+            {
+                // A schema that cannot be read leaves the Tab as it was; nothing is written to the editor.
+                Log.Error($"{found.Kind} expansion: reading the schema of {target}", ex);
+                return false;
+            }
             Expansion expansion = null;
             if (found.Kind == ExpansionKind.Exec)
             {
@@ -286,7 +297,11 @@ namespace SqlAssist.Editor
                 var table = schema.Find(found.Schema, found.Name);
                 if (table == null) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
                 else if (found.Kind == ExpansionKind.Insert) expansion = StatementExpander.BuildInsert(table, indent, newLine);
-                else expansion = StatementExpander.BuildUpdate(table, indent, newLine);
+                else
+                {
+                    var declared = SqlVariables.DeclaredBefore(window.Text, window.Caret).Select(v => v.Name);
+                    expansion = StatementExpander.BuildUpdate(table, indent, newLine, declared);
+                }
             }
             if (expansion == null)
             {

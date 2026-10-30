@@ -38,6 +38,10 @@ namespace SqlAssist.Core.Tests
         [InlineData("ALTER PROCEDURE dbo.usp_Do|", ExpansionKind.Alter, "dbo", "usp_Do")]
         [InlineData("ALTER VIEW v_Orders|   ", ExpansionKind.Alter, null, "v_Orders")]
         [InlineData("GO\n  EXEC sp_who|", ExpansionKind.Exec, null, "sp_who")]
+        [InlineData("INSERT INTO [dbo].[Table 1]|", ExpansionKind.Insert, "dbo", "Table 1")]
+        [InlineData("INSERT INTO dbo.T|\n\n(SELECT 1)", ExpansionKind.Insert, "dbo", "T")] // a blank line ends the statement
+        [InlineData("UPDATE dbo.T|\nSELECT 1", ExpansionKind.Update, "dbo", "T")]
+        [InlineData("INSERT INTO dbo.T|\nGO", ExpansionKind.Insert, "dbo", "T")]
         public void Finds(string sql, ExpansionKind kind, string schema, string name)
         {
             var t = At(sql);
@@ -55,6 +59,14 @@ namespace SqlAssist.Core.Tests
         [InlineData("CREATE OR ALTER PROCEDURE dbo.p|")]
         [InlineData("FOREIGN KEY (a) REFERENCES t (a) ON UPDATE CASCADE|")]
         [InlineData("INSERT INTO Depart|ment")]
+        [InlineData("INSERT INTO dbo.T|\n(a, b)")]
+        [InlineData("INSERT INTO dbo.T|\n  -- columns\n(a, b)")]
+        [InlineData("INSERT INTO dbo.T|\nVALUES (1)")]
+        [InlineData("INSERT INTO dbo.T|\nSELECT 1")]
+        [InlineData("INSERT INTO dbo.T|\nDEFAULT VALUES")]
+        [InlineData("UPDATE dbo.T|\nSET a = 1")]
+        [InlineData("UPDATE dbo.T|\nWITH (ROWLOCK) SET a = 1")]
+        [InlineData("UPDATE dbo.T|\nAS x SET a = 1")]
         public void IgnoresOtherPlaces(string sql) => Assert.Null(At(sql));
 
         [Fact]
@@ -84,41 +96,165 @@ namespace SqlAssist.Core.Tests
             Assert.False(StatementExpander.HasExecTemplate(null));
         }
 
-        [Fact]
-        public void Insert_SkipsIdentityComputedAndRowversion()
+        private static readonly DbObject Table1 = new DbObject("dbo", "Table1", false, new[]
         {
-            var e = StatementExpander.BuildInsert(Department, "", "\n");
+            new DbColumn("Id", "int", isNullable: false, isPrimaryKey: true),
+            new DbColumn("Code", "nvarchar(20)", isNullable: false),
+            new DbColumn("Name", "nvarchar(100)"),
+        });
+
+        [Fact]
+        public void Insert_ListsColumnsAndPlaceholdersInTheSameOrder()
+        {
+            var e = StatementExpander.BuildInsert(Table1, "", "\n");
             Assert.Equal(
                 "\n(" +
+                "\n    Id," +
+                "\n    Code," +
                 "\n    Name" +
-                "\n   ,GroupName" +
-                "\n   ,ModifiedDate" +
                 "\n)" +
                 "\nVALUES" +
                 "\n(" +
-                "\n    N'' -- Name nvarchar(50) NOT NULL" +
-                "\n   ,N'' -- GroupName nvarchar(50)" +
-                "\n   ,GETDATE() -- ModifiedDate datetime NOT NULL" +
+                "\n    0," +
+                "\n    N''," +
+                "\n    N''" +
                 "\n);", e.Text);
+            Assert.Equal("0,", e.Text.Substring(e.CaretOffset, 2)); // the caret is on the first value
+            Assert.Equal("", e.Prefix);
+        }
+
+        [Fact]
+        public void Insert_SkipsIdentityComputedAndRowversion()
+        {
+            var e = StatementExpander.BuildInsert(Department, "\t", "\n");
+            Assert.Equal(
+                "\n\t(" +
+                "\n\t    Name," +
+                "\n\t    GroupName," +
+                "\n\t    ModifiedDate" +
+                "\n\t)" +
+                "\n\tVALUES" +
+                "\n\t(" +
+                "\n\t    N''," +
+                "\n\t    N''," +
+                "\n\t    GETDATE()" +
+                "\n\t);", e.Text);
             Assert.Equal("N''", e.Text.Substring(e.CaretOffset, 3));
         }
 
         [Fact]
-        public void Update_SetsNonKeyColumnsAndFiltersOnThePrimaryKey()
+        public void Insert_QuotesNamesThatNeedIt()
         {
-            var e = StatementExpander.BuildUpdate(Department, "\t", "\n");
-            Assert.Equal(
-                "\n\tSET Name = N'' -- nvarchar(50) NOT NULL" +
-                "\n\t   ,GroupName = N'' -- nvarchar(50)" +
-                "\n\t   ,ModifiedDate = GETDATE() -- datetime NOT NULL" +
-                "\n\tWHERE DepartmentID = 0 -- smallint NOT NULL (PK)", e.Text);
+            var t = new DbObject("dbo", "T", false, new[] { new DbColumn("Order No", "int"), new DbColumn("Select", "int") });
+            var e = StatementExpander.BuildInsert(t, "", "\n");
+            Assert.StartsWith("\n(\n    [Order No],\n    [Select]\n)", e.Text);
         }
 
         [Fact]
-        public void Update_WithoutPrimaryKeyLeavesWhereEmpty()
+        public void Insert_NothingWritableIsNothingToExpand()
         {
-            var t = new DbObject("dbo", "Log", false, new[] { new DbColumn("Msg", "varchar(100)") });
-            Assert.EndsWith("\nWHERE ", StatementExpander.BuildUpdate(t, "", "\n").Text);
+            var t = new DbObject("dbo", "T", false, new[]
+            {
+                new DbColumn("Id", "int", isIdentity: true, isPrimaryKey: true),
+                new DbColumn("RowVer", "rowversion"),
+                new DbColumn("Calc", "int", isComputed: true),
+            });
+            Assert.Null(StatementExpander.BuildInsert(t, "", "\n"));
+        }
+
+        [Fact]
+        public void Update_SetsNonKeyColumnsAndFiltersOnAParameterDeclaredAbove()
+        {
+            var e = StatementExpander.BuildUpdate(Table1, "", "\n");
+            Assert.Equal(
+                "\nSET" +
+                "\n    Code = N''," +
+                "\n    Name = N''" +
+                "\nWHERE Id = @Id;", e.Text);
+            Assert.Equal("DECLARE @Id int = NULL;\n", e.Prefix);
+            Assert.Equal("N''", e.Text.Substring(e.CaretOffset, 3)); // the first value in SET
+        }
+
+        [Fact]
+        public void Update_SkipsIdentityComputedRowversionAndKeysInSet()
+        {
+            var e = StatementExpander.BuildUpdate(Department, "\t", "\n");
+            Assert.Equal(
+                "\n\tSET" +
+                "\n\t    Name = N''," +
+                "\n\t    GroupName = N''," +
+                "\n\t    ModifiedDate = GETDATE()" +
+                "\n\tWHERE DepartmentID = @DepartmentID;", e.Text);
+            Assert.Equal("DECLARE @DepartmentID smallint = NULL;\n\t", e.Prefix);
+        }
+
+        [Fact]
+        public void Update_CompositeKeyJoinsWithAnd()
+        {
+            var t = new DbObject("dbo", "OrderLine", false, new[]
+            {
+                new DbColumn("OrderId", "int", isNullable: false, isPrimaryKey: true),
+                new DbColumn("LineNo", "smallint", isNullable: false, isPrimaryKey: true),
+                new DbColumn("Sku", "varchar(30)", isNullable: false, isPrimaryKey: true),
+                new DbColumn("Qty", "decimal(18,2)"),
+            });
+            var e = StatementExpander.BuildUpdate(t, "", "\n");
+            Assert.Equal(
+                "\nSET" +
+                "\n    Qty = 0" +
+                "\nWHERE OrderId = @OrderId" +
+                "\n  AND [LineNo] = @LineNo" +
+                "\n  AND Sku = @Sku;", e.Text);
+            Assert.Equal("DECLARE @OrderId int = NULL;\nDECLARE @LineNo smallint = NULL;\nDECLARE @Sku varchar(30) = NULL;\n", e.Prefix);
+        }
+
+        [Fact]
+        public void Update_ParameterNamesAreLegalAndUnique()
+        {
+            var t = new DbObject("dbo", "T", false, new[]
+            {
+                new DbColumn("Order No", "int", isNullable: false, isPrimaryKey: true),
+                new DbColumn("Order_No", "int", isNullable: false, isPrimaryKey: true),
+                new DbColumn("Val", "int"),
+            });
+            var e = StatementExpander.BuildUpdate(t, "", "\n");
+            Assert.EndsWith("\nWHERE [Order No] = @Order_No\n  AND Order_No = @Order_No2;", e.Text);
+            Assert.Equal("DECLARE @Order_No int = NULL;\nDECLARE @Order_No2 int = NULL;\n", e.Prefix);
+        }
+
+        [Fact]
+        public void Update_DoesNotRedeclareAParameterTheBatchAlreadyHas()
+        {
+            var e = StatementExpander.BuildUpdate(Table1, "", "\n", new[] { "@id" });
+            Assert.Equal("", e.Prefix);
+            Assert.EndsWith("\nWHERE Id = @Id;", e.Text);
+        }
+
+        [Fact]
+        public void Update_WithoutPrimaryKeyLeavesATodoThatCannotRun()
+        {
+            var t = new DbObject("dbo", "Log", false, new[] { new DbColumn("Msg", "varchar(100)"), new DbColumn("Level", "int") });
+            var e = StatementExpander.BuildUpdate(t, "", "\n");
+            Assert.Equal(
+                "\nSET" +
+                "\n    Msg = ''," +
+                "\n    Level = 0" +
+                "\nWHERE /* TODO: choose the rows to update before running */ ;", e.Text);
+            Assert.Equal("", e.Prefix);
+            Assert.DoesNotContain("1=1", e.Text.Replace(" ", ""));
+            // The caret sits before the ';', where the condition goes.
+            Assert.Equal(";", e.Text.Substring(e.CaretOffset));
+        }
+
+        [Fact]
+        public void Update_OnlyKeyColumnsIsNothingToExpand()
+        {
+            var t = new DbObject("dbo", "Link", false, new[]
+            {
+                new DbColumn("A", "int", isNullable: false, isPrimaryKey: true),
+                new DbColumn("B", "int", isNullable: false, isPrimaryKey: true),
+            });
+            Assert.Null(StatementExpander.BuildUpdate(t, "", "\n"));
         }
 
         [Fact]

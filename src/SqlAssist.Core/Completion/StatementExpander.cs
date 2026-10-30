@@ -41,9 +41,46 @@ namespace SqlAssist.Core.Completion
     /// current definition as ALTER.</summary>
     public static class StatementExpander
     {
-        private const string FirstItem = "    ", NextItem = "   ,";
+        private const string Item = "    ";
+
+        // What a statement already has after its table name when the user wrote the rest of it themselves.
+        private static readonly string[] InsertContinuations = { "VALUES", "SELECT", "EXEC", "EXECUTE", "DEFAULT", "WITH", "OUTPUT" };
+        private static readonly string[] UpdateContinuations = { "SET", "WITH", "AS" };
 
         public static ExpansionTarget Find(string text, int caret)
+        {
+            var target = FindName(text, caret);
+            if (target == null) return null;
+            if ((target.Kind == ExpansionKind.Insert || target.Kind == ExpansionKind.Update) && HasContinuation(text, caret, target.Kind))
+                return null;
+            return target;
+        }
+
+        /// <summary>The next word after the table name already belongs to this statement: "INSERT INTO t" ⏎ "(a, b)",
+        /// ⏎ "VALUES …", "UPDATE t" ⏎ "SET …". A blank line in between ends the statement, so what follows is something else.</summary>
+        private static bool HasContinuation(string text, int caret, ExpansionKind kind)
+        {
+            int from = caret;
+            foreach (var t in SqlTokenizer.Tokenize(text).Where(t => t.Start >= caret))
+            {
+                if (IsBlankLineBetween(text, from, t.Start)) return false;
+                if (t.Kind == TokenKind.Comment) { from = t.End; continue; }
+                if (kind == ExpansionKind.Insert && t.IsSymbol('(')) return true;
+                foreach (string word in kind == ExpansionKind.Insert ? InsertContinuations : UpdateContinuations)
+                    if (t.IsWord(word)) return true;
+                return false;
+            }
+            return false;
+        }
+
+        private static bool IsBlankLineBetween(string text, int from, int to)
+        {
+            int breaks = 0;
+            for (int i = from; i < to; i++) if (text[i] == '\n') breaks++;
+            return breaks >= 2;
+        }
+
+        private static ExpansionTarget FindName(string text, int caret)
         {
             if (caret <= 0 || caret > text.Length) return null;
             // Only at the end of a line: "INSERT INTO t| (a, b)" already has its template.
@@ -110,46 +147,80 @@ namespace SqlAssist.Core.Completion
 
             var sb = new StringBuilder();
             sb.Append(newLine).Append(indent).Append('(');
-            for (int i = 0; i < columns.Count; i++)
-                sb.Append(newLine).Append(indent).Append(i == 0 ? FirstItem : NextItem).Append(SqlIdentifier.QuoteIfNeeded(columns[i].Name));
+            AppendItems(sb, columns.Select(c => SqlIdentifier.QuoteIfNeeded(c.Name)).ToList(), indent, newLine, out _);
             sb.Append(newLine).Append(indent).Append(')');
             sb.Append(newLine).Append(indent).Append("VALUES");
             sb.Append(newLine).Append(indent).Append('(');
-            int caret = -1;
-            for (int i = 0; i < columns.Count; i++)
-            {
-                sb.Append(newLine).Append(indent).Append(i == 0 ? FirstItem : NextItem);
-                if (caret < 0) caret = sb.Length;
-                sb.Append(DefaultValue(columns[i].TypeName)).Append(" -- ").Append(columns[i].Name).Append(Describe(columns[i]));
-            }
+            AppendItems(sb, columns.Select(c => DefaultValue(c.TypeName)).ToList(), indent, newLine, out int caret);
             sb.Append(newLine).Append(indent).Append(");");
             return new Expansion(sb.ToString(), caret);
         }
 
-        /// <summary>SET for every writable non-key column and WHERE on the primary key. Without a primary key the
-        /// WHERE is left empty on purpose: the statement does not run until the user says which rows.</summary>
-        public static Expansion BuildUpdate(DbObject table, string indent, string newLine)
+        /// <summary>SET for every writable non-key column and WHERE on the primary key, whose values are @parameters
+        /// DECLAREd (typed, NULL) in front of the statement. Without a primary key the WHERE holds only a TODO comment:
+        /// the statement is a syntax error until the user says which rows, never an UPDATE of the whole table.</summary>
+        /// <param name="declared">@variables the batch already declares; they are used but not DECLAREd again.</param>
+        public static Expansion BuildUpdate(DbObject table, string indent, string newLine, IEnumerable<string> declared = null)
         {
             var set = table.Columns.Where(c => Writable(c) && !c.IsPrimaryKey).ToList();
             if (set.Count == 0) return null;
             var keys = table.Columns.Where(c => c.IsPrimaryKey).ToList();
+            var known = new HashSet<string>(declared ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
             var sb = new StringBuilder();
-            int caret = -1;
-            for (int i = 0; i < set.Count; i++)
-            {
-                sb.Append(newLine).Append(indent).Append(i == 0 ? "SET " : NextItem).Append(SqlIdentifier.QuoteIfNeeded(set[i].Name)).Append(" = ");
-                if (caret < 0) caret = sb.Length;
-                sb.Append(DefaultValue(set[i].TypeName)).Append(" --").Append(Describe(set[i]));
-            }
+            sb.Append(newLine).Append(indent).Append("SET");
+            AppendItems(sb, set.Select(c => SqlIdentifier.QuoteIfNeeded(c.Name) + " = " + DefaultValue(c.TypeName)).ToList(), indent, newLine, out int caret);
+            // The caret goes on the first value, after "name = ".
+            caret += SqlIdentifier.QuoteIfNeeded(set[0].Name).Length + 3;
+
+            var declare = new StringBuilder();
             sb.Append(newLine).Append(indent).Append("WHERE ");
+            if (keys.Count == 0)
+            {
+                sb.Append("/* TODO: choose the rows to update before running */ ");
+                caret = sb.Length;
+                sb.Append(';');
+                return new Expansion(sb.ToString(), caret);
+            }
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < keys.Count; i++)
             {
+                string parameter = ParameterName(keys[i].Name, used);
                 if (i > 0) sb.Append(newLine).Append(indent).Append("  AND ");
-                sb.Append(SqlIdentifier.QuoteIfNeeded(keys[i].Name)).Append(" = ").Append(DefaultValue(keys[i].TypeName))
-                  .Append(" --").Append(Describe(keys[i])).Append(" (PK)");
+                sb.Append(SqlIdentifier.QuoteIfNeeded(keys[i].Name)).Append(" = ").Append(parameter);
+                if (!known.Contains(parameter))
+                    declare.Append("DECLARE ").Append(parameter).Append(' ')
+                           .Append(string.IsNullOrWhiteSpace(keys[i].TypeName) ? "sql_variant" : keys[i].TypeName)
+                           .Append(" = NULL;").Append(newLine).Append(indent);
             }
-            return new Expansion(sb.ToString(), caret);
+            sb.Append(';');
+            return new Expansion(sb.ToString(), caret, declare.ToString());
+        }
+
+        /// <summary>One item per line, comma at the end of every line but the last. <paramref name="caret"/> is the
+        /// offset of the first item.</summary>
+        private static void AppendItems(StringBuilder sb, IReadOnlyList<string> items, string indent, string newLine, out int caret)
+        {
+            caret = -1;
+            for (int i = 0; i < items.Count; i++)
+            {
+                sb.Append(newLine).Append(indent).Append(Item);
+                if (caret < 0) caret = sb.Length;
+                sb.Append(items[i]);
+                if (i < items.Count - 1) sb.Append(',');
+            }
+        }
+
+        /// <summary>"@" and the column name with anything a variable name cannot hold turned into "_"; a name
+        /// already taken by an earlier key column gets a number.</summary>
+        private static string ParameterName(string column, HashSet<string> used)
+        {
+            var sb = new StringBuilder("@");
+            foreach (char c in column) sb.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
+            if (sb.Length == 1 || char.IsDigit(sb[1])) sb.Insert(1, '_');
+            string name = sb.ToString(), candidate = name;
+            for (int n = 2; !used.Add(candidate); n++) candidate = name + n;
+            return candidate;
         }
 
         /// <summary>Whether Tab after "EXEC p" has a parameter list to write: a procedure (a function is not EXECuted)
@@ -221,9 +292,6 @@ namespace SqlAssist.Core.Completion
             !c.IsIdentity && !c.IsComputed &&
             !string.Equals(c.TypeName, "timestamp", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(c.TypeName, "rowversion", StringComparison.OrdinalIgnoreCase);
-
-        private static string Describe(DbColumn c) =>
-            (string.IsNullOrEmpty(c.TypeName) ? "" : " " + c.TypeName) + (c.IsNullable ? "" : " NOT NULL");
 
         private static bool IsObjectName(SqlToken t) => (t.Kind == TokenKind.Word || t.Kind == TokenKind.QuotedIdentifier);
 
