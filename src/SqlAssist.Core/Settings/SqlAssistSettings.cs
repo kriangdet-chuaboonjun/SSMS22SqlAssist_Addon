@@ -15,6 +15,7 @@ namespace SqlAssist.Core.Settings
 
         public FormatOptions Format { get; } = new FormatOptions();
         public RiskOptions Risk { get; } = new RiskOptions();
+        public EditorOptions Editor { get; } = new EditorOptions();
 
         public static SqlAssistSettings Parse(string xml)
         {
@@ -52,6 +53,10 @@ namespace SqlAssist.Core.Settings
                 settings.Risk.SkipTempTables = Flag(risk, "SkipTempTables", settings.Risk.SkipTempTables);
                 settings.Risk.WarnBeforeExecute = Flag(risk, "WarnBeforeExecute", settings.Risk.WarnBeforeExecute);
             }
+
+            var editor = Child(root, "Editor");
+            if (editor != null)
+                settings.Editor.HighlightInsertColumns = Flag(editor, "HighlightInsertColumns", settings.Editor.HighlightInsertColumns);
             return settings;
         }
 
@@ -63,6 +68,8 @@ namespace SqlAssist.Core.Settings
                         new XAttribute("KeywordCase", Format.KeywordCase.ToString()),
                         new XAttribute("IndentSize", Format.IndentSize.ToString(CultureInfo.InvariantCulture)),
                         new XAttribute("CommaStyle", Format.CommaStyle.ToString())),
+                    new XElement("Editor",
+                        new XAttribute("HighlightInsertColumns", Editor.HighlightInsertColumns)),
                     new XElement("RiskCheck",
                         new XAttribute("UpdateWithoutWhere", Risk.UpdateWithoutWhere),
                         new XAttribute("DeleteWithoutWhere", Risk.DeleteWithoutWhere),

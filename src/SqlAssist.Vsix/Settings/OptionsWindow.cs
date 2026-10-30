@@ -38,6 +38,7 @@ namespace SqlAssist.Settings
         private readonly CheckBox _truncate = new CheckBox { Content = "TRUNCATE TABLE", Margin = new Thickness(0, 0, 0, 6) };
         private readonly CheckBox _drop = new CheckBox { Content = "DROP TABLE", Margin = new Thickness(0, 0, 0, 6) };
         private readonly CheckBox _skipTemp = new CheckBox { Content = "ข้ามตาราง temp (#...) และ table variable (@...)", Margin = new Thickness(0, 6, 0, 0) };
+        private readonly CheckBox _highlightInsert = new CheckBox { Content = "ไฮไลต์คอลัมน์และค่าที่ตรงกันใน INSERT … VALUES", FontWeight = FontWeights.SemiBold };
         private readonly CheckBox _warn = new CheckBox { Content = "เตือนก่อนกด Execute (ทดลอง)", FontWeight = FontWeights.SemiBold };
         private readonly TextBlock _guardStatus = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray, FontSize = 11, Margin = new Thickness(18, 6, 0, 0) };
         private bool _loading = true;
@@ -71,6 +72,7 @@ namespace SqlAssist.Settings
             _drop.IsChecked = _settings.Risk.DropTable;
             _skipTemp.IsChecked = _settings.Risk.SkipTempTables;
             _warn.IsChecked = _settings.Risk.WarnBeforeExecute;
+            _highlightInsert.IsChecked = _settings.Editor.HighlightInsertColumns;
             _guardStatus.Text = "สถานะตอนนี้: " + ExecuteGuard.Status;
 
             // Building the layout needs no UI-thread check: it only creates WPF controls, which is also what lets this window be
@@ -122,6 +124,7 @@ namespace SqlAssist.Settings
             var tabs = new TabControl();
             tabs.Items.Add(new TabItem { Header = "จัดรูปแบบ SQL", Content = FormatTab() });
             tabs.Items.Add(new TabItem { Header = "ตรวจจุดเสี่ยง", Content = RiskTab() });
+            tabs.Items.Add(new TabItem { Header = "Editor", Content = EditorTab() });
             root.Children.Add(tabs);
             return root;
         }
@@ -173,6 +176,22 @@ namespace SqlAssist.Settings
                 TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray, FontSize = 11, Margin = new Thickness(18, 4, 0, 0),
             });
             panel.Children.Add(_guardStatus);
+            return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        }
+
+        private UIElement EditorTab()
+        {
+            var panel = new StackPanel { Margin = new Thickness(12) };
+            panel.Children.Add(_highlightInsert);
+            panel.Children.Add(new TextBlock
+            {
+                Text = "เมื่อ caret อยู่ที่ค่าใน VALUES (…) จะแรเงาชื่อคอลัมน์ในรายการ INSERT (…) ที่อยู่ตำแหน่งเดียวกัน พร้อมกรอบสีฟ้ารอบค่านั้น " +
+                       "และเมื่อ caret อยู่ที่ชื่อคอลัมน์ จะแรเงาค่าตำแหน่งเดียวกันในทุกแถวของ VALUES\n\n" +
+                       "จับคู่ตามลำดับตำแหน่งจากข้อความ SQL (ไม่ต่อฐานข้อมูล) ใช้กับ INSERT ที่ระบุรายชื่อคอลัมน์และใช้ VALUES เท่านั้น ไม่รวม INSERT … SELECT / EXEC " +
+                       "ถ้าจำนวนคอลัมน์กับค่าไม่เท่ากัน หรือ SQL ยังพิมพ์ไม่ครบ จะแสดงเฉพาะคู่ที่ชัดเจน\n\n" +
+                       "ผลของตัวเลือกนี้เริ่มหลังกดบันทึกและขยับ caret",
+                TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray, FontSize = 11, Margin = new Thickness(18, 6, 0, 0),
+            });
             return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         }
 
@@ -244,6 +263,7 @@ namespace SqlAssist.Settings
                 _settings.Risk.DropTable = _drop.IsChecked == true;
                 _settings.Risk.SkipTempTables = _skipTemp.IsChecked == true;
                 _settings.Risk.WarnBeforeExecute = _warn.IsChecked == true;
+                _settings.Editor.HighlightInsertColumns = _highlightInsert.IsChecked == true;
                 SettingsProvider.Save(_settings);
 
                 ExecuteGuard.Apply(_settings.Risk);

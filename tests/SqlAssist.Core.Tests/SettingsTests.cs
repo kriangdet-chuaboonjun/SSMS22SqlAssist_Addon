@@ -72,6 +72,21 @@ namespace SqlAssist.Core.Tests
         }
 
         [Fact]
+        public void InsertHighlightIsOnByDefaultAndKeepsWhatWasChosen()
+        {
+            Assert.True(SqlAssistSettings.Parse(null).Editor.HighlightInsertColumns);
+            Assert.True(SqlAssistSettings.Parse("<SqlAssistSettings><Editor/></SqlAssistSettings>").Editor.HighlightInsertColumns);
+            Assert.True(SqlAssistSettings.Parse("<SqlAssistSettings><Editor HighlightInsertColumns='maybe'/></SqlAssistSettings>").Editor.HighlightInsertColumns);
+            Assert.False(SqlAssistSettings.Parse("<SqlAssistSettings><Editor highlightinsertcolumns='FALSE'/></SqlAssistSettings>").Editor.HighlightInsertColumns);
+
+            var settings = new SqlAssistSettings();
+            settings.Editor.HighlightInsertColumns = false;
+            Assert.False(SqlAssistSettings.Parse(settings.ToXml()).Editor.HighlightInsertColumns);
+            settings.Editor.HighlightInsertColumns = true;
+            Assert.True(SqlAssistSettings.Parse(settings.ToXml()).Editor.HighlightInsertColumns);
+        }
+
+        [Fact]
         public void RiskCheckDefaults()
         {
             var risk = SqlAssistSettings.Parse(null).Risk;
