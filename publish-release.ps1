@@ -29,10 +29,10 @@ $sections = [regex]::Matches($changelog, "(?ms)^## \[(\d+\.\d+\.\d+)\]([^\r\n]*)
 if (-not ($sections | Where-Object { $_.Groups[1].Value -eq $version -and $_.Groups[3].Value.Trim() })) {
     throw "CHANGELOG.md has no section for [$version] - add one first."
 }
-# Every new release also gets a short entry in REVISION_HISTORY.md ("## x.y.z - date").
+# Every new release also gets a short entry in REVISION_HISTORY.md ("## [x.y.z] - date", same as CHANGELOG.md).
 if (-not $UpdateNotes) {
     $history = Get-Content (Join-Path $root "REVISION_HISTORY.md") -Raw -Encoding UTF8
-    if ($history -notmatch "(?m)^## $([regex]::Escape($version)) - ") {
+    if ($history -notmatch "(?m)^## \[$([regex]::Escape($version))\] - ") {
         throw "REVISION_HISTORY.md has no entry for $version - add one first."
     }
 }

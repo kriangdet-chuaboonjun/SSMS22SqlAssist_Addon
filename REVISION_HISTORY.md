@@ -4,7 +4,8 @@
 รายละเอียดเต็มของแต่ละเวอร์ชันอยู่ใน [CHANGELOG.md](CHANGELOG.md) และไฟล์ติดตั้งอยู่ที่หน้า
 [GitHub Releases](https://github.com/kriangdet-chuaboonjun/SSMS22SqlAssist_Addon/releases)
 
-ทุกครั้งที่ออกเวอร์ชันใหม่ ให้เพิ่มแถวในตารางและหัวข้อของเวอร์ชันนั้นไว้บนสุด (`publish-release.ps1` จะไม่ publish
+ทุกครั้งที่ออกเวอร์ชันใหม่ ให้เพิ่มแถวในตารางและหัวข้อ `## [x.y.z] - YYYY-MM-DD` ของเวอร์ชันนั้นไว้บนสุด
+แบ่งเป็น `### เพิ่ม` / `### เปลี่ยน` / `### แก้ไข` เหมือน CHANGELOG.md (`publish-release.ps1` จะไม่ publish
 ถ้าไฟล์นี้ยังไม่มีเวอร์ชันนั้น)
 
 | เวอร์ชัน | วันที่ | สรุป |
@@ -21,36 +22,39 @@
 > เวอร์ชัน 1.5.5 ไม่ได้ออก (ข้ามจาก 1.5.4 ไป 1.5.6) · release ของ 1.5.x ถูกลบออกจากหน้า GitHub Releases แล้ว
 > (2026-11-20) ไฟล์ติดตั้งที่โหลดได้เริ่มที่ 1.6.0
 
----
+## [1.6.0] - 2026-11-19
 
-## 1.6.0 - 2026-11-19
+### เพิ่ม
 
-**เพิ่ม**
 - **AI Assistant** (Tools › SqlAssist › AI Assistant…): แชตด้านข้าง editor ถามเรื่อง SQL กับ OpenRouter หรือ Ollama
   ส่งเฉพาะข้อความที่พิมพ์และ SQL ที่แนบเอง, มี Explain / Review / Suggest Optimization, ปุ่ม Copy และ Insert into Editor
   (SqlAssist ไม่รัน SQL ให้) key ของ OpenRouter เก็บใน Windows Credential Manager
 - **IntelliSense สำหรับ `#temp` และ `@table`** ที่ประกาศใน Query Editor: เติมชื่อคอลัมน์และขยาย `*` ด้วย Tab
 
-**เปลี่ยน**
+### เปลี่ยน
+
 - หน้าต่าง **Options** ใหม่ (ตั้งค่าซ้าย ตัวอย่าง SQL ขวา สีตามธีม Light/Dark)
 - หน้าต่าง **Search** ใช้ dropdown และปุ่มหน้าตาเดียวกับ Options
 - ภายใน: การเชื่อมต่อฐานข้อมูลทุกจุดผ่านทางเดียวกัน เตรียมรองรับ Entra ID
 
-## 1.5.7 - 2026-11-13
+## [1.5.7] - 2026-11-13
 
-**เพิ่ม**
+### เพิ่ม
+
 - **Generate Script As › INSERT รู้จักคอลัมน์ IDENTITY:** ครอบด้วย `SET IDENTITY_INSERT … ON/OFF` หรือตัดคอลัมน์ออก
   (เลือกได้ที่ Options › Results)
 - **รายการแนะนำเรียนรู้จากที่ใช้บ่อย:** รายการที่เลือกบ่อยและเพิ่งใช้ขึ้นก่อนรายการที่ตรงพอ ๆ กัน
   (เก็บในเครื่องที่ `%LOCALAPPDATA%\SqlAssist\usage.txt` ปิด/ล้างได้ที่ Options › Editor)
 
-**เปลี่ยน**
-- Generate Script As › UPDATE: คอลัมน์ IDENTITY เริ่มเป็น Key แทน SET
+### เปลี่ยน
+
+- **Generate Script As › UPDATE:** คอลัมน์ IDENTITY เริ่มเป็น Key แทน SET
 - พิมพ์ต่อจาก `FROM ตาราง alias` แล้ว `WHERE` ขึ้นก่อน `WHEN` / `WITH` / `WHILE`
 
-## 1.5.6 - 2026-11-10
+## [1.5.6] - 2026-11-10
 
-**เพิ่ม**
+### เพิ่ม
+
 - **Find Usages** (หน้าต่าง Search, คลิกขวาหรือ Shift+F12): ดูว่า object ไหนอ้างถึงตาราง / view / procedure / function /
   คอลัมน์ / user-defined type นั้น
 - **Generate CRUD procedures** (หน้าต่าง Search, คลิกขวาที่ตาราง): สร้าง Select / Insert / Update / Delete procedure
@@ -58,42 +62,49 @@
 - **Function Parameter Hints:** tooltip แสดงรูปแบบการเรียกฟังก์ชัน built-in และฟังก์ชันของผู้ใช้
   พร้อมทำตัวหนาที่ parameter ตำแหน่งปัจจุบัน (ปิดได้ที่ Options › Editor)
 
-## 1.5.4 - 2026-11-05
+## [1.5.4] - 2026-11-05
 
-**เปลี่ยน**
+### เปลี่ยน
+
 - เอาฟังก์ชัน **CSV to SQL** ออก
 - รายการแนะนำแบบต้นไม้ตาราง (`SELECT |`) ไม่แสดงบรรทัดคำอธิบายใต้รายการแล้ว
 
-**แก้ไข**
+### แก้ไข
+
 - รายการแนะนำแบบต้นไม้ตาราง: checkbox ต้องคลิก 2 ครั้งถึงจะติก ตอนนี้คลิกครั้งเดียว
 
-## 1.5.3 - 2026-11-05
+## [1.5.3] - 2026-11-05
 
-**เพิ่ม**
+### เพิ่ม
+
 - **`GROUP BY` + Tab:** เติม grouping expression จาก `SELECT` ของ query เดียวกัน (ตัด alias และ aggregate ออก)
 - **ไฮไลต์คอลัมน์และรายการที่ตรงกันใน `INSERT … SELECT`:** จับคู่คอลัมน์ปลายทางกับ select item ตามตำแหน่ง
 
-**เปลี่ยน**
+### เปลี่ยน
+
 - ภายใน: แยกตัวอ่านรายการ SELECT มาใช้ร่วมกันระหว่างสองฟีเจอร์ข้างบน
 
-## 1.5.2 - 2026-10-30
+## [1.5.2] - 2026-10-30
 
-**เพิ่ม**
+### เพิ่ม
+
 - ข้อความ **"Press Tab to …"** ใต้ชื่อตารางหลัง `INSERT INTO t` และ `UPDATE t` เมื่อ Tab ขยายได้จริง
 - ข้อความ **"Press Tab to insert the current definition"** หลัง `ALTER PROCEDURE` / `ALTER FUNCTION` / `ALTER VIEW`
 
-## 1.5.1 - 2026-10-30
+## [1.5.1] - 2026-10-30
 
-**เพิ่ม**
+### เพิ่ม
+
 - **ไฮไลต์คอลัมน์และค่าที่ตรงกันใน `INSERT … VALUES`:** วาง caret ที่ค่าหรือชื่อคอลัมน์ แล้วอีกฝั่งที่ตำแหน่งเดียวกันถูกแรเงา
   (ปิดได้ที่ Options › Editor)
 
-## 1.5.0 - 2026-10-30
+## [1.5.0] - 2026-10-30
 
-**เปลี่ยน**
-- **Tab หลัง `INSERT INTO ตาราง`** ขยายเป็นรายชื่อคอลัมน์ + `VALUES` พร้อมค่าตั้งต้นตามชนิดข้อมูล
+### เปลี่ยน
+
+- **Tab หลัง `INSERT INTO ตาราง`:** ขยายเป็นรายชื่อคอลัมน์ + `VALUES` พร้อมค่าตั้งต้นตามชนิดข้อมูล
   (ข้าม IDENTITY / computed / rowversion)
-- **Tab หลัง `UPDATE ตาราง`** ขยายเป็น `SET` + `WHERE` ตาม Primary Key พร้อม `DECLARE @parameter`
+- **Tab หลัง `UPDATE ตาราง`:** ขยายเป็น `SET` + `WHERE` ตาม Primary Key พร้อม `DECLARE @parameter`
   ตารางที่ไม่มี Primary Key ได้ `WHERE /* TODO */` ที่รันไม่ได้จนกว่าจะเขียนเงื่อนไขเอง
 - ย้าย repo ไปที่ organization `kriangdet-chuaboonjun` ผู้ใช้ 1.4.3 หรือเก่ากว่าต้องโหลด `SqlAssistSetup-*.exe`
   จากหน้า Releases มาติดตั้งเองหนึ่งครั้ง
