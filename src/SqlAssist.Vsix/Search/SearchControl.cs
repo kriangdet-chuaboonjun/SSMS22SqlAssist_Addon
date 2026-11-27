@@ -114,6 +114,12 @@ namespace SqlAssist.Search
         private string _pinnedServerKey;
         private string _lastActiveServerKey;
         private List<string> _databases;
+        /// <summary>The database-list load in flight for <see cref="_databasesLoadKey"/>, shared by the prefetch, the
+        /// Databases dropdown and an all-databases search so the list is queried once.</summary>
+        private Task<List<string>> _databasesLoad;
+        private string _databasesLoadKey;
+        private string _prefetchedKey;
+        private static readonly TimeSpan DatabaseListTimeout = TimeSpan.FromSeconds(30);
         private readonly SortedSet<string> _selected = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool _allDatabases;
         /// <summary>Until the user picks databases, the selection follows the query window's database.</summary>
@@ -164,7 +170,7 @@ namespace SqlAssist.Search
             _serverButton = new DropDownButton(170, "Server: the active query window's, or one used earlier this session") { Margin = new Thickness(0, 0, 6, 0) };
             _serverButton.Click += (s, e) => ShowServerMenu();
             var refresh = new Button { Content = "Refresh", Padding = new Thickness(12, 0, 12, 0), ToolTip = "Reload the search index from the server" };
-            refresh.Click += (s, e) => { SearchIndexCache.Instance.Clear(); _databases = null; StartSearch(); };
+            refresh.Click += (s, e) => { SearchIndexCache.Instance.Clear(); _databases = null; _databasesLoad = null; StartSearch(); };
             UpdateTypesButton();
 
             // Right-docked children fill from the right edge inward; the search box takes what is left.
@@ -693,6 +699,7 @@ namespace SqlAssist.Search
             if (_server == null || _server.ServerKey != target.ServerKey)
             {
                 _databases = null;
+                _databasesLoad = null;
                 _selectionTouched = false;
                 _allDatabases = false;
                 _selected.Clear();
@@ -705,7 +712,78 @@ namespace SqlAssist.Search
             }
             _serverButton.Text = target.Server;
             UpdateDatabasesButton();
+            // Once per server switch: a server that fails to answer isn't asked again on every keystroke; the dropdown retries.
+            if (_databases == null && _databasesLoad == null && _prefetchedKey != target.ServerKey)
+            {
+                _prefetchedKey = target.ServerKey;
+                PrefetchDatabases(target);
+            }
             return target;
+        }
+
+        /// <summary>Starts listing the server's databases in the background, so the Databases dropdown usually opens at once.
+        /// A failure is logged and the dropdown retries when it is opened.</summary>
+        private void PrefetchDatabases(ConnectionTarget server) =>
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                try { await GetDatabasesAsync(server, CancellationToken.None); }
+                catch (Exception) { /* logged by LoadDatabaseListAsync */ }
+            }).FileAndForget("SqlAssist/Search/PrefetchDatabases");
+
+        /// <summary>The server's databases: the kept list, the load already in flight, or a new load. Cancelling
+        /// <paramref name="token"/> stops only this wait, never the shared load.</summary>
+        private async Task<List<string>> GetDatabasesAsync(ConnectionTarget server, CancellationToken token)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            if (_databases != null && _server?.ServerKey == server.ServerKey) return _databases;
+            // A failed load left behind by callers that all stopped waiting is retried, not joined.
+            if (_databasesLoad == null || _databasesLoad.IsFaulted || _databasesLoad.IsCanceled || _databasesLoadKey != server.ServerKey)
+            {
+                _databasesLoadKey = server.ServerKey;
+                _databasesLoad = LoadDatabaseListAsync(server);
+            }
+            var load = _databasesLoad;
+            try
+            {
+                var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (token.Register(() => cancelled.TrySetResult(true)))
+                    await Task.WhenAny(load, cancelled.Task);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                token.ThrowIfCancellationRequested();
+                var names = await load;
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                // UpdateServer clears the list when the server changes: one that finished loading after a switch isn't kept.
+                if (_databasesLoad == load && _server?.ServerKey == server.ServerKey) _databases = names;
+                return names;
+            }
+            finally
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (_databasesLoad == load && load.IsCompleted) _databasesLoad = null;
+            }
+        }
+
+        private static async Task<List<string>> LoadDatabaseListAsync(ConnectionTarget server)
+        {
+            using (var cts = new CancellationTokenSource(DatabaseListTimeout))
+            {
+                try
+                {
+                    return await SearchIndexLoader.LoadDatabasesAsync(server, cts.Token).ConfigureAwait(false);
+                }
+                // SqlClient often reports a cancelled read as a SqlException ("Operation cancelled by user"), not an OCE.
+                catch (Exception ex) when (cts.IsCancellationRequested)
+                {
+                    var timeout = new TimeoutException("No answer from " + server.Server + " within " + (int)DatabaseListTimeout.TotalSeconds + " s", ex);
+                    Log.Error("Listing databases of " + server.Server, timeout);
+                    throw timeout;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Listing databases of " + server.Server, ex);
+                    throw;
+                }
+            }
         }
 
         private void UpdateDatabasesButton()
@@ -759,11 +837,9 @@ namespace SqlAssist.Search
                 List<string> databases;
                 if (_allDatabases)
                 {
-                    var loaded = _databases ?? await SearchIndexLoader.LoadDatabasesAsync(server, token);
+                    if (_databases == null) SetStatus("Loading the database list of " + server.Server + "…");
+                    databases = await GetDatabasesAsync(server, token);
                     if (token.IsCancellationRequested) return;
-                    // UpdateServer clears the list when the server changes: one that finished loading after a switch isn't kept.
-                    if (_server?.ServerKey == server.ServerKey) _databases = loaded;
-                    databases = loaded;
                 }
                 else databases = _selected.ToList();
 
@@ -773,10 +849,17 @@ namespace SqlAssist.Search
                 {
                     string db = databases[i];
                     SetStatus($"Searching {db} ({i + 1}/{databases.Count})… {_results.Count} found");
-                    IReadOnlyList<SearchItem> items;
                     try
                     {
-                        items = await SearchIndexCache.Instance.GetAsync(server, db, token);
+                        var items = await SearchIndexCache.Instance.GetAsync(server, db, token);
+                        token.ThrowIfCancellationRequested();
+                        int room = ResultLimit - _results.Count;
+                        var found = items == null
+                            ? await SearchIndexLoader.SearchPagesAsync(server, db, matcher, room, token)
+                            : await Task.Run(() => matcher.Search(items, room), token);
+                        if (token.IsCancellationRequested) return;
+                        foreach (var m in found) _results.Add(new ResultRow(m));
+                        searched++;
                     }
                     catch (OperationCanceledException) { return; }
                     catch (Exception)
@@ -784,13 +867,6 @@ namespace SqlAssist.Search
                         skipped.Add(db); // already logged by the cache
                         continue;
                     }
-                    if (token.IsCancellationRequested) return;
-
-                    int room = ResultLimit - _results.Count;
-                    var found = await Task.Run(() => matcher.Search(items, room), token);
-                    if (token.IsCancellationRequested) return;
-                    foreach (var m in found) _results.Add(new ResultRow(m));
-                    searched++;
                 }
 
                 string summary = $"{_results.Count} result{(_results.Count == 1 ? "" : "s")} in {searched} database{(searched == 1 ? "" : "s")}";
@@ -819,17 +895,29 @@ namespace SqlAssist.Search
             var databases = _databases;
             if (databases == null)
             {
+                // The first open may wait on a login over the network and a HAS_DBACCESS scan of every database: say so,
+                // and keep a second click from starting the wait again.
+                string loading = "Loading the database list of " + server.Server + "…";
+                string before = _status.Text;
+                _databasesButton.IsEnabled = false;
+                _databasesButton.Text = "Loading…";
+                SetStatus(loading);
                 try
                 {
-                    databases = await SearchIndexLoader.LoadDatabasesAsync(server, CancellationToken.None);
+                    databases = await GetDatabasesAsync(server, CancellationToken.None);
+                    if (_status.Text == loading) SetStatus(before);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error("Listing databases of " + server.Server, ex);
+                    // Already logged by LoadDatabaseListAsync.
                     databases = new List<string>();
+                    SetStatus("Could not list the databases of " + server.Server + ": " + ex.Message + " (see log). Open the list again to retry.");
                 }
-                // As in SearchAsync: a list for a server that is no longer the current one isn't kept.
-                if (_server?.ServerKey == server.ServerKey) _databases = databases;
+                finally
+                {
+                    _databasesButton.IsEnabled = true;
+                    UpdateDatabasesButton();
+                }
             }
 
             if (_server?.ServerKey != server.ServerKey) return;
@@ -842,11 +930,26 @@ namespace SqlAssist.Search
             var menu = MenuFor(_databasesButton);
             menu.MinWidth = Math.Max(280, menu.MinWidth);
             menu.MaxHeight = Math.Max(200, SystemParameters.WorkArea.Height * 0.7);
-            var filter = new TextBox { MinWidth = 230, Height = 32, FontSize = 13, Padding = new Thickness(10, 0, 10, 0), Margin = new Thickness(0, 3, 0, 6),
+            var filter = new TextBox { MinWidth = 230, MinHeight = 24, Height = 24, FontSize = 13, Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(0, 3, 0, 6),   // same 24 as the toolbar row
                 ToolTip = "พิมพ์ชื่อ Database เพื่อกรองรายการ" };
             filter.SetResourceReference(StyleProperty, "SearchDatabaseFilterStyle");
             System.Windows.Automation.AutomationProperties.SetName(filter, "ค้นหา Database");
-            menu.Items.Add(new MenuItem { Header = filter, StaysOpenOnClick = true, Focusable = false,
+
+            // Clears every check (and All databases) in one click; the next pick starts a search.
+            var clearIcon = new System.Windows.Shapes.Path { Data = Geometry.Parse("M1,1 H13 V13 H1 Z M4.5,4.5 L9.5,9.5 M9.5,4.5 L4.5,9.5"),
+                StrokeThickness = 1.3, StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                Width = 14, Height = 14 };
+            clearIcon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, EnvironmentColors.ToolWindowTextBrushKey);
+            var clear = new Button { Content = clearIcon, Width = 24, MinHeight = 24, Height = 24, Margin = new Thickness(6, 3, 0, 6), Padding = new Thickness(0),
+                Background = Brushes.Transparent, BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+                ToolTip = "ล้าง Database ที่เลือกทั้งหมด" };
+            clear.SetResourceReference(StyleProperty, typeof(Button));   // the toolbar's themed button look, as DropDownButton
+            System.Windows.Automation.AutomationProperties.SetName(clear, "ล้าง Database ที่เลือกทั้งหมด");
+            var editorRow = new DockPanel { LastChildFill = true };
+            DockPanel.SetDock(clear, Dock.Right);
+            editorRow.Children.Add(clear);
+            editorRow.Children.Add(filter);
+            menu.Items.Add(new MenuItem { Header = editorRow, StaysOpenOnClick = true, Focusable = false,
                 Style = (Style)menu.FindResource("SearchDropdownEditor") });
             var all = new MenuItem { Header = "All databases", IsCheckable = true, IsChecked = _allDatabases, StaysOpenOnClick = true };
             menu.Items.Add(all);
@@ -878,6 +981,22 @@ namespace SqlAssist.Search
                 foreach (var i in dbItems) i.IsChecked = !_allDatabases && _selected.Contains((string)i.Tag);
                 UpdateDatabasesButton();
                 StartSearch();
+            };
+            clear.Click += (s, e) =>
+            {
+                e.Handled = true;
+                try
+                {
+                    _selectionTouched = true;
+                    _allDatabases = false;
+                    _selected.Clear();
+                    all.IsChecked = false;
+                    foreach (var i in dbItems) i.IsChecked = false;
+                    UpdateDatabasesButton();
+                    // No search here: with nothing picked, a search would fall back to the login's default database.
+                    filter.Focus();
+                }
+                catch (Exception ex) { Log.Error("Clearing the database selection", ex); }
             };
             var empty = new MenuItem { Header = "ไม่พบฐานข้อมูล", IsEnabled = false, Visibility = dbItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed };
             menu.Items.Add(empty);

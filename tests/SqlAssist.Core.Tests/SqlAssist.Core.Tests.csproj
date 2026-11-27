@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SqlAssist.Core\SqlAssist.Core.csproj" />
     <Compile Include="..\..\src\SqlAssist.Vsix\Assistant\CredentialKeyStore.cs" Link="Assistant\CredentialKeyStore.cs" />
+    <Compile Include="..\..\src\SqlAssist.Setup\VsixUpgrade.cs" Link="Setup\VsixUpgrade.cs" />
   </ItemGroup>
 </Project>

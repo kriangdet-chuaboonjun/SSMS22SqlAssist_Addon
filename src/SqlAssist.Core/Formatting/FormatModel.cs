@@ -66,6 +66,18 @@ namespace SqlAssist.Core.Formatting
     /// layout rule can say "at this level" without caring what is nested inside.</summary>
     internal static class ItemBuilder
     {
+        // Layout walks these frames recursively. Bound the depth while building
+        // the tree iteratively, before layout can use the editor thread's stack.
+        private const int MaxNesting = 128;
+
+        internal sealed class NestingLimitExceededException : Exception
+        {
+            public NestingLimitExceededException()
+                : base("วงเล็บและ CASE ซ้อนกันเกิน " + MaxNesting + " ชั้น")
+            {
+            }
+        }
+
         private sealed class Frame
         {
             public GroupItem Group;   // null for a CASE frame and for the root
@@ -109,6 +121,8 @@ namespace SqlAssist.Core.Formatting
                     stack[stack.Count - 1].Items.Add(top.Case);
                 }
                 else top.Items.Add(new TokItem(t));
+
+                if (stack.Count - 1 > MaxNesting) throw new NestingLimitExceededException();
             }
             while (stack.Count > 1) Flatten(stack);
             return root.Items;

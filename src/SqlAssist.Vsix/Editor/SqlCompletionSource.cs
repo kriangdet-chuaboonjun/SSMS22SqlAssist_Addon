@@ -120,11 +120,14 @@ namespace SqlAssist.Editor
                     return new CompletionContext(varItems.ToImmutableArray());
                 }
 
-                var locals = EditorLocalTables.At(triggerLocation);
+                var localIndex = EditorLocalTables.GetAsync(triggerLocation.Snapshot);
                 bool localOnly = ctx.Kind == CaretContextKind.TableName && SchemaModel.IsLocalName(ctx.TypedText) ||
                     ctx.Kind == CaretContextKind.Qualified && ctx.TablesInScope.Any(t => t.Answers(ctx.Qualifier) && SchemaModel.IsLocalName(t.Name));
-                var schema = (localOnly ? SchemaModel.Empty :
-                    await SchemaCache.Instance.GetAsync(target, SchemaWait, token).ConfigureAwait(false)).WithLocalTables(locals);
+                var schema = localOnly ? SchemaModel.Empty :
+                    await SchemaCache.Instance.GetAsync(target, SchemaWait, token).ConfigureAwait(false);
+                var locals = (await localIndex.ConfigureAwait(false)).At(triggerLocation.Position);
+                token.ThrowIfCancellationRequested();
+                schema = schema.WithLocalTables(locals);
 
                 if (schema.Objects.Count > 0 && schema.HasUnknownTables(ctx.TablesInScope))
                     SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
@@ -165,6 +168,10 @@ namespace SqlAssist.Editor
                 }
                 AddUsageKeys(items, target);
                 return new CompletionContext(items.ToImmutableArray());
+            }
+            catch (OperationCanceledException)
+            {
+                return CompletionContext.Empty;
             }
             catch (Exception ex)
             {

@@ -16,7 +16,24 @@ namespace SqlAssist.Search
         // Schema ids 2-4 are guest, INFORMATION_SCHEMA and sys; 16384+ are the db_* role schemas.
         private const string IndexSql = @"
 SET NOCOUNT ON;
-SELECT s.name FROM sys.schemas s WHERE s.schema_id NOT IN (2, 3, 4) AND s.schema_id < 16384 ORDER BY s.name;
+DECLARE @pageObjects TABLE (id int PRIMARY KEY);
+IF @paged = 1
+BEGIN
+    ;WITH candidates AS (
+        SELECT TOP (64) o.object_id,
+            SUM(COALESCE(DATALENGTH(m.definition), CONVERT(bigint, 0))) OVER (ORDER BY o.object_id) AS bytes
+        FROM sys.objects o
+        LEFT JOIN sys.sql_modules m ON m.object_id = o.object_id
+        WHERE o.object_id > @after AND o.is_ms_shipped = 0
+            AND o.type IN ('U', 'V', 'P', 'PC', 'FN', 'IF', 'TF', 'FS', 'FT', 'TR')
+        ORDER BY o.object_id
+    )
+    INSERT @pageObjects SELECT object_id FROM candidates
+    WHERE bytes <= 4194304 OR object_id = (SELECT MIN(object_id) FROM candidates);
+END;
+DECLARE @first bit = CASE WHEN @paged = 0 OR @after = 0 THEN 1 ELSE 0 END;
+
+SELECT s.name FROM sys.schemas s WHERE @first = 1 AND s.schema_id NOT IN (2, 3, 4) AND s.schema_id < 16384 ORDER BY s.name;
 
 SELECT o.object_id, s.name, o.name, o.type, p.name, m.definition, p.type
 FROM sys.objects o
@@ -24,6 +41,7 @@ JOIN sys.schemas s ON s.schema_id = o.schema_id
 LEFT JOIN sys.objects p ON p.object_id = o.parent_object_id AND o.type = 'TR'
 LEFT JOIN sys.sql_modules m ON m.object_id = o.object_id
 WHERE o.is_ms_shipped = 0 AND o.type IN ('U', 'V', 'P', 'PC', 'FN', 'IF', 'TF', 'FS', 'FT', 'TR')
+AND (@paged = 0 OR o.object_id IN (SELECT id FROM @pageObjects))
 ORDER BY s.name, o.name;
 
 SELECT c.object_id, c.name, t.name, c.max_length, c.precision, c.scale, c.is_nullable
@@ -31,6 +49,7 @@ FROM sys.columns c
 JOIN sys.objects o ON o.object_id = c.object_id
 JOIN sys.types t ON t.user_type_id = c.user_type_id
 WHERE o.is_ms_shipped = 0 AND o.type IN ('U', 'V')
+AND (@paged = 0 OR o.object_id IN (SELECT id FROM @pageObjects))
 ORDER BY c.object_id, c.column_id;
 
 -- shortcut: rowstore indexes only (columnstore, XML and spatial ones are left out); add them with their own scripts if asked.
@@ -44,6 +63,7 @@ JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
 -- to an index on its own (key_ordinal 0, not included).
 WHERE (i.type IN (1, 2) OR i.is_primary_key = 1) AND i.is_hypothetical = 0 AND o.is_ms_shipped = 0 AND o.type IN ('U', 'V')
   AND (ic.key_ordinal > 0 OR ic.is_included_column = 1)
+  AND (@paged = 0 OR o.object_id IN (SELECT id FROM @pageObjects))
 ORDER BY i.object_id, i.index_id, ic.is_included_column, ic.key_ordinal, ic.index_column_id;
 
 SELECT fk.object_id, fk.parent_object_id, fk.name, rs.name, rt.name, pc.name, rc.name
@@ -54,27 +74,40 @@ JOIN sys.objects rt ON rt.object_id = fkc.referenced_object_id
 JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
 JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
 WHERE fk.is_ms_shipped = 0
+AND (@paged = 0 OR fk.parent_object_id IN (SELECT id FROM @pageObjects))
 ORDER BY fk.object_id, fkc.constraint_column_id;
 
-SELECT cc.parent_object_id, cc.name, cc.definition FROM sys.check_constraints cc WHERE cc.is_ms_shipped = 0;
+SELECT cc.parent_object_id, cc.name, cc.definition FROM sys.check_constraints cc WHERE cc.is_ms_shipped = 0
+AND (@paged = 0 OR cc.parent_object_id IN (SELECT id FROM @pageObjects));
 
 SELECT dc.parent_object_id, dc.name, dc.definition, c.name
 FROM sys.default_constraints dc
 JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
-WHERE dc.is_ms_shipped = 0;
+WHERE dc.is_ms_shipped = 0 AND (@paged = 0 OR dc.parent_object_id IN (SELECT id FROM @pageObjects));
 
 SELECT t.user_type_id, s.name, t.name, t.is_table_type, bt.name, t.max_length, t.precision, t.scale, t.is_nullable
 FROM sys.types t
 JOIN sys.schemas s ON s.schema_id = t.schema_id
 LEFT JOIN sys.types bt ON bt.user_type_id = t.system_type_id
-WHERE t.is_user_defined = 1
+WHERE @first = 1 AND t.is_user_defined = 1
 ORDER BY s.name, t.name;
 
 SELECT tt.user_type_id, c.name, t.name, c.max_length, c.precision, c.scale, c.is_nullable
 FROM sys.table_types tt
 JOIN sys.columns c ON c.object_id = tt.type_table_object_id
 JOIN sys.types t ON t.user_type_id = c.user_type_id
-ORDER BY tt.user_type_id, c.column_id;";
+WHERE @first = 1
+ORDER BY tt.user_type_id, c.column_id;
+
+SELECT ISNULL(MAX(id), 0) FROM @pageObjects;";
+
+        private const string EstimateSql = @"
+SELECT COALESCE(SUM(DATALENGTH(m.definition)), CONVERT(bigint, 0)) + (
+    (SELECT COUNT_BIG(*) FROM sys.objects WHERE is_ms_shipped = 0) +
+    (SELECT COUNT_BIG(*) FROM sys.columns c JOIN sys.objects o ON c.object_id = o.object_id WHERE o.is_ms_shipped = 0) +
+    (SELECT COUNT_BIG(*) FROM sys.index_columns i JOIN sys.objects o ON i.object_id = o.object_id WHERE o.is_ms_shipped = 0)
+) * 1024
+FROM sys.sql_modules m JOIN sys.objects o ON m.object_id = o.object_id WHERE o.is_ms_shipped = 0;";
 
         private const string DatabasesSql = @"
 SELECT name FROM sys.databases
@@ -93,13 +126,18 @@ ORDER BY name;";
         public static async Task<List<string>> LoadDatabasesAsync(ConnectionTarget server, CancellationToken token)
         {
             var names = new List<string>();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            long openMs;
             using (var conn = await server.OpenAsync(token).ConfigureAwait(false))
             {
+                openMs = sw.ElapsedMilliseconds;
                 using (var cmd = new SqlCommand(DatabasesSql, conn) { CommandTimeout = 30 })
                 using (var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                     while (await reader.ReadAsync(token).ConfigureAwait(false))
                         names.Add(reader.GetString(0));
             }
+            // Split so a slow first open (login over the network) can be told apart from a slow HAS_DBACCESS scan.
+            Log.Info($"Listed {names.Count} databases of {server.Server} in {sw.ElapsedMilliseconds} ms (connect {openMs} ms)");
             return names;
         }
 
@@ -113,17 +151,54 @@ ORDER BY name;";
             }
         }
 
-        public static async Task<List<SearchItem>> LoadAsync(ConnectionTarget server, string database, CancellationToken token)
+        public static async Task<List<SearchItem>> LoadIfSmallAsync(ConnectionTarget server, string database, long budget, CancellationToken token)
+        {
+            using (var conn = await server.ForDatabase(database).OpenAsync(token).ConfigureAwait(false))
+            using (var estimate = new SqlCommand(EstimateSql, conn) { CommandTimeout = 30 })
+            {
+                if ((long)await estimate.ExecuteScalarAsync(token).ConfigureAwait(false) > budget) return null;
+                return (await LoadAsync(conn, database, false, 0, token).ConfigureAwait(false)).items;
+            }
+        }
+
+        public static async Task<List<SearchMatch>> SearchPagesAsync(ConnectionTarget server, string database,
+            SearchMatcher matcher, int limit, CancellationToken token)
+        {
+            var matches = new List<SearchMatch>();
+            using (var conn = await server.ForDatabase(database).OpenAsync(token).ConfigureAwait(false))
+            {
+                int after = 0;
+                do
+                {
+                    var page = await LoadAsync(conn, database, true, after, token).ConfigureAwait(false);
+                    foreach (var item in page.items)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var hit = matcher.Match(item);
+                        if (hit == null) continue;
+                        matches.Add(hit);
+                        if (matches.Count == limit) return matches;
+                    }
+                    after = page.lastId;
+                }
+                while (after != 0);
+            }
+            return matches;
+        }
+
+        private static async Task<(List<SearchItem> items, int lastId)> LoadAsync(SqlConnection conn, string database,
+            bool paged, int after, CancellationToken token)
         {
             var items = new List<SearchItem>();
             var objects = new List<ObjectRow>();
             var byId = new Dictionary<int, ObjectRow>();
             var extra = new List<SearchItem>();
 
-            using (var conn = await server.ForDatabase(database).OpenAsync(token).ConfigureAwait(false))
+            int lastId;
+            using (var cmd = new SqlCommand(IndexSql, conn) { CommandTimeout = 120 })
             {
-                // Module source of a big database can be large; allow longer than the schema load.
-                using (var cmd = new SqlCommand(IndexSql, conn) { CommandTimeout = 120 })
+                cmd.Parameters.Add("@paged", System.Data.SqlDbType.Bit).Value = paged;
+                cmd.Parameters.Add("@after", System.Data.SqlDbType.Int).Value = after;
                 using (var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
                 {
                     while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -279,6 +354,8 @@ ORDER BY name;";
                     foreach (var tt in tableTypes.Values)
                         extra.Add(new SearchItem(database, tt.schema, tt.name, SearchObjectType.UserDefinedType,
                             script: TableScriptBuilder.BuildTableType(tt.schema, tt.name, tt.columns, null), subKind: "Table"));
+                    await reader.NextResultAsync(token).ConfigureAwait(false);
+                    lastId = await reader.ReadAsync(token).ConfigureAwait(false) ? reader.GetInt32(0) : 0;
                 }
             }
 
@@ -292,7 +369,7 @@ ORDER BY name;";
                     items.Add(new SearchItem(database, o.Schema, c.Name, SearchObjectType.Column, o.Name, null, ownerPreview, o.Type));
             }
             items.AddRange(extra);
-            return items;
+            return (items, lastId);
         }
 
         /// <summary>An index or constraint of a table or view; found by name only, its script is the preview.</summary>

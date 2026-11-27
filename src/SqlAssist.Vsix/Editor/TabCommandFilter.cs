@@ -3,6 +3,7 @@ using System.ComponentModel.Composition;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Language.Intellisense.AsyncCompletion;
@@ -14,6 +15,7 @@ using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Utilities;
 using SqlAssist.Connection;
 using SqlAssist.Core.Completion;
+using SqlAssist.Core.Schema;
 using SqlAssist.Core.Sql;
 using SqlAssist.Schema;
 using SqlAssist.Settings;
@@ -54,12 +56,20 @@ namespace SqlAssist.Editor
 
         private readonly IWpfTextView _view;
         private readonly IAsyncCompletionBroker _broker;
+        private int _editorRevision;
+        private int? _pendingRevision;
 
         public TabCommandFilter(IWpfTextView view, IAsyncCompletionBroker broker)
         {
             _view = view;
             _broker = broker;
+            _view.Caret.PositionChanged += (s, e) => _editorRevision++;
+            _view.TextBuffer.PostChanged += OnBufferChanged;
+            _view.LostAggregateFocus += (s, e) => _editorRevision++;
+            _view.Closed += (s, e) => _view.TextBuffer.PostChanged -= OnBufferChanged;
         }
+
+        private void OnBufferChanged(object sender, EventArgs e) => _editorRevision++;
 
         public IOleCommandTarget Next { get; set; }
 
@@ -202,6 +212,7 @@ namespace SqlAssist.Editor
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             if (!_view.Selection.IsEmpty || _view.Selection.Mode == TextSelectionMode.Box) return false;
+            if (_pendingRevision == _editorRevision) return true;
             var caret = _view.Caret.Position.BufferPosition;
             var window = TextWindow.Around(caret.Snapshot, caret.Position);
 
@@ -284,18 +295,13 @@ namespace SqlAssist.Editor
             if (string.IsNullOrEmpty(newLine)) newLine = _view.Options.GetOptionValue(DefaultOptions.NewLineCharacterOptionId);
 
             if (found.Kind == ExpansionKind.Alter)
+                return FinishWhenReady(LoadDefinitionAsync(target, found), caret, window, target, ApplyDefinition);
+
+            return FinishWhenReady(SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None),
+                caret, window, target, ApplyTemplate);
+
+            bool ApplyDefinition(string definition)
             {
-                string definition;
-                try
-                {
-                    using (var cts = new CancellationTokenSource(DefinitionWait))
-                        definition = ThreadHelper.JoinableTaskFactory.Run(() => DefinitionLoader.LoadAsync(target, found.Schema, found.Name, cts.Token));
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("ALTER expansion: reading the definition of " + found.Name, ex);
-                    return false;
-                }
                 string script = StatementExpander.AlterScript(definition);
                 if (script == null)
                 {
@@ -308,50 +314,83 @@ namespace SqlAssist.Editor
                 return true;
             }
 
-            SqlAssist.Core.Schema.SchemaModel schema;
-            try
+            bool ApplyTemplate(SchemaModel schema)
             {
-                schema = ThreadHelper.JoinableTaskFactory.Run(() => SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None));
-            }
-            catch (Exception ex)
-            {
-                // A schema that cannot be read leaves the Tab as it was; nothing is written to the editor.
-                Log.Error($"{found.Kind} expansion: reading the schema of {target}", ex);
-                return false;
-            }
-            Expansion expansion = null;
-            if (found.Kind == ExpansionKind.Exec)
-            {
-                var routine = schema.FindRoutine(found.Schema, found.Name);
-                if (StatementExpander.HasExecTemplate(routine))
-                    expansion = StatementExpander.BuildExec(routine, snapshot.GetText(line.Start, caret.Position - line.Start), indent, newLine);
-                else if (routine == null) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
-            }
-            else
-            {
-                var table = schema.Find(found.Schema, found.Name);
-                if (table == null) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
-                else if (found.Kind == ExpansionKind.Insert) expansion = StatementExpander.BuildInsert(table, indent, newLine);
+                Expansion expansion = null;
+                if (found.Kind == ExpansionKind.Exec)
+                {
+                    var routine = schema.FindRoutine(found.Schema, found.Name);
+                    if (StatementExpander.HasExecTemplate(routine))
+                        expansion = StatementExpander.BuildExec(routine, snapshot.GetText(line.Start, caret.Position - line.Start), indent, newLine);
+                    else if (routine == null) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
+                }
                 else
                 {
-                    var declared = SqlVariables.DeclaredBefore(window.Text, window.Caret).Select(v => v.Name);
-                    expansion = StatementExpander.BuildUpdate(table, indent, newLine, declared);
+                    var table = schema.Find(found.Schema, found.Name);
+                    if (table == null) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
+                    else if (found.Kind == ExpansionKind.Insert) expansion = StatementExpander.BuildInsert(table, indent, newLine);
+                    else
+                    {
+                        var declared = SqlVariables.DeclaredBefore(window.Text, window.Caret).Select(v => v.Name);
+                        expansion = StatementExpander.BuildUpdate(table, indent, newLine, declared);
+                    }
                 }
-            }
-            if (expansion == null)
-            {
-                Log.Info($"{found.Kind} expansion skipped: {found.Name} not found (or nothing to fill in) in {target}");
-                return false;
-            }
+                if (expansion == null)
+                {
+                    Log.Info($"{found.Kind} expansion skipped: {found.Name} not found (or nothing to fill in) in {target}");
+                    return false;
+                }
 
-            // One edit, so a single Undo takes the whole template back.
-            using (var edit = snapshot.TextBuffer.CreateEdit())
-            {
-                edit.Insert(caret.Position, expansion.Text);
-                if (expansion.Prefix.Length > 0) edit.Insert(statementStart, expansion.Prefix);
-                edit.Apply();
+                // One edit, so a single Undo takes the whole template back.
+                using (var edit = snapshot.TextBuffer.CreateEdit())
+                {
+                    edit.Insert(caret.Position, expansion.Text);
+                    if (expansion.Prefix.Length > 0) edit.Insert(statementStart, expansion.Prefix);
+                    edit.Apply();
+                }
+                _view.Caret.MoveTo(new SnapshotPoint(_view.TextBuffer.CurrentSnapshot, caret.Position + expansion.Prefix.Length + expansion.CaretOffset));
+                return true;
             }
-            _view.Caret.MoveTo(new SnapshotPoint(_view.TextBuffer.CurrentSnapshot, caret.Position + expansion.Prefix.Length + expansion.CaretOffset));
+        }
+
+        private static async Task<string> LoadDefinitionAsync(ConnectionTarget target, ExpansionTarget found)
+        {
+            using (var cts = new CancellationTokenSource(DefinitionWait))
+                return await DefinitionLoader.LoadAsync(target, found.Schema, found.Name, cts.Token).ConfigureAwait(false);
+        }
+
+        /// <summary>Returns the editor to SSMS while loading. A delayed result is valid only for the same editor context.</summary>
+        private bool FinishWhenReady<T>(Task<T> data, SnapshotPoint caret, TextWindow window, ConnectionTarget target, Func<T, bool> apply)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (data.Status == TaskStatus.RanToCompletion) return apply(data.GetAwaiter().GetResult());
+            int revision = _editorRevision;
+            _pendingRevision = revision;
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                T result = default;
+                bool ready = false;
+                try
+                {
+                    result = await data.ConfigureAwait(false);
+                    ready = true;
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { Log.Error("Loading Tab expansion", ex); }
+
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(alwaysYield: true);
+                if (_pendingRevision != revision) return;
+                _pendingRevision = null;
+                if (_view.IsClosed || !_view.HasAggregateFocus || !_view.Selection.IsEmpty ||
+                    _editorRevision != revision || _view.Caret.Position.BufferPosition != caret ||
+                    target != null && EditorConnection.Get(window)?.Key != target.Key)
+                    return;
+
+                if (ready && apply(result)) return;
+                // The original Tab was handled while waiting. Only forward it if the context is still valid.
+                var group = VSConstants.VSStd2K;
+                Next.Exec(ref group, (uint)VSConstants.VSStd2KCmdID.TAB, 0, IntPtr.Zero, IntPtr.Zero);
+            }).FileAndForget("SqlAssist/TabExpansion");
             return true;
         }
 
@@ -363,31 +402,41 @@ namespace SqlAssist.Editor
             var star = SqlContextAnalyzer.FindStar(window.Text, window.Caret);
             if (star == null) return false;
 
-            var target = EditorConnection.Get(window);
-            var locals = EditorLocalTables.At(caret);
-            var schema = (star.Tables.All(r => SqlAssist.Core.Schema.SchemaModel.IsLocalName(r.Name))
-                ? SqlAssist.Core.Schema.SchemaModel.Empty
-                : ThreadHelper.JoinableTaskFactory.Run(() => SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None)))
-                .WithLocalTables(locals);
-            var span = new SnapshotSpan(caret.Snapshot, window.Offset + star.ReplaceStart, star.ReplaceEnd - star.ReplaceStart);
+            bool localOnly = star.Tables.All(r => SchemaModel.IsLocalName(r.Name));
+            var target = localOnly ? null : EditorConnection.Get(window);
+            var schema = SchemaCache.Instance.GetAsync(target, StarSchemaWait, CancellationToken.None);
+            var locals = EditorLocalTables.GetAsync(caret.Snapshot);
+            return FinishWhenReady(CombineAsync(), caret, window, target, ApplyColumns);
 
-            // One column per line with leading commas, aligned under the first column.
-            var line = span.Start.GetContainingLine();
-            string linePrefix = caret.Snapshot.GetText(line.Start, span.Start - line.Start);
-            string newLine = line.GetLineBreakText();
-            if (string.IsNullOrEmpty(newLine)) newLine = _view.Options.GetOptionValue(DefaultOptions.NewLineCharacterOptionId);
-
-            string columns = StarExpander.Expand(star, schema, linePrefix, newLine);
-            if (columns == null)
+            async Task<SchemaModel> CombineAsync()
             {
-                if (schema.HasUnknownTables(star.Tables)) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
-                Log.Info("SELECT * expansion skipped: table not found in schema of " + target);
-                return false;
+                var model = await schema.ConfigureAwait(false);
+                var index = await locals.ConfigureAwait(false);
+                return model.WithLocalTables(index.At(caret.Position));
             }
 
-            var after = caret.Snapshot.TextBuffer.Replace(span, columns);
-            _view.Caret.MoveTo(new SnapshotPoint(after, span.Start.Position + columns.Length));
-            return true;
+            bool ApplyColumns(SchemaModel model)
+            {
+                var span = new SnapshotSpan(caret.Snapshot, window.Offset + star.ReplaceStart, star.ReplaceEnd - star.ReplaceStart);
+
+                // One column per line with leading commas, aligned under the first column.
+                var line = span.Start.GetContainingLine();
+                string linePrefix = caret.Snapshot.GetText(line.Start, span.Start - line.Start);
+                string newLine = line.GetLineBreakText();
+                if (string.IsNullOrEmpty(newLine)) newLine = _view.Options.GetOptionValue(DefaultOptions.NewLineCharacterOptionId);
+
+                string columns = StarExpander.Expand(star, model, linePrefix, newLine);
+                if (columns == null)
+                {
+                    if (model.HasUnknownTables(star.Tables)) SchemaCache.Instance.RefreshIfOlderThanThrottle(target);
+                    Log.Info("SELECT * expansion skipped: table not found in schema of " + target);
+                    return false;
+                }
+
+                var after = caret.Snapshot.TextBuffer.Replace(span, columns);
+                _view.Caret.MoveTo(new SnapshotPoint(after, span.Start.Position + columns.Length));
+                return true;
+            }
         }
 
         private void Trigger(CompletionTriggerReason reason, char ch)

@@ -20,6 +20,24 @@ namespace SqlAssist.Core.Tests
 
         private static FormatOptions Trailing => new FormatOptions { CommaStyle = CommaStyle.Trailing };
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ExcessiveNestingReturnsTheOriginalSql(bool useCase)
+        {
+            string sql = useCase
+                ? "SELECT " + string.Concat(Enumerable.Repeat("CASE WHEN 1 = 1 THEN ", 256)) + "1"
+                    + string.Concat(Enumerable.Repeat(" END", 256)) + ";"
+                : "SELECT " + new string('(', 256) + "1" + new string(')', 256) + ";";
+
+            var result = SqlFormatter.Format(sql);
+
+            Assert.False(result.IsSuccess);
+            Assert.False(result.Changed);
+            Assert.Equal(sql, result.Text);
+            Assert.Contains("ซ้อน", result.Error);
+        }
+
         // ---- SELECT ----
 
         [Fact]

@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 using System.Xml.Linq;
 
 namespace SqlAssist.Setup
@@ -59,13 +62,16 @@ namespace SqlAssist.Setup
             if (manifest == null) return null;
             try
             {
-                return (string)XDocument.Load(manifest).Descendants().First(e => e.Name.LocalName == "Identity").Attribute("Version");
+                return (string)ReadIdentity(XDocument.Load(manifest))?.Attribute("Version");
             }
             catch
             {
                 return null;
             }
         }
+
+        private static XElement ReadIdentity(XDocument manifest) =>
+            manifest.Descendants().FirstOrDefault(e => e.Name.LocalName == "Identity");
 
         private static string FindInstalledManifest(string ide)
         {
@@ -80,7 +86,7 @@ namespace SqlAssist.Setup
                 {
                     try
                     {
-                        var identity = XDocument.Load(manifest).Descendants().FirstOrDefault(e => e.Name.LocalName == "Identity");
+                        var identity = ReadIdentity(XDocument.Load(manifest));
                         if ((string)identity?.Attribute("Id") == VsixId) return manifest;
                     }
                     catch
@@ -111,41 +117,140 @@ namespace SqlAssist.Setup
         }
 
         /// <summary>Installs (or updates over) the embedded .vsix. Null on success, otherwise the error text.</summary>
-        public static string Install(string ide, IProgress<Step> progress = null)
+        public static string Install(string ide, IProgress<Step> progress = null) =>
+            RunExclusive(() => InstallCore(ide, progress));
+
+        private static string InstallCore(string ide, IProgress<Step> progress)
         {
             const int total = 4;
             string vsix = Path.Combine(Path.GetTempPath(), "SqlAssist-" + Guid.NewGuid().ToString("N") + ".vsix");
+            string backup = null;
+            bool keepBackup = false;
             try
             {
                 progress?.Report(new Step(1, total, "เตรียมไฟล์ add-on"));
                 using (var res = typeof(SetupEngine).Assembly.GetManifestResourceStream("SqlAssist.vsix"))
-                using (var file = File.Create(vsix))
-                    res.CopyTo(file);
+                    CopyPackage(res, vsix, SetupVersion);
 
-                // Removing the old copy first makes updates and same-version reinstalls work,
-                // instead of VSIXInstaller refusing with "already installed".
-                progress?.Report(new Step(2, total, "ถอนเวอร์ชันเดิมออก (ถ้ามี)"));
-                RunInstaller(ide, "/quiet /uninstall:" + VsixId);
-                progress?.Report(new Step(3, total, "ติดตั้ง SqlAssist " + SetupVersion + " ลงใน SSMS"));
-                int code = RunInstaller(ide, "/quiet \"" + vsix + "\"");
-                if (code != 0) return InstallerError(code);
+                string installedManifest = FindInstalledManifest(ide);
+                string installedVersion = null;
+                if (installedManifest != null)
+                {
+                    installedVersion = (string)ReadIdentity(XDocument.Load(installedManifest))?.Attribute("Version");
+                    if (!Version.TryParse(installedVersion, out _))
+                        return "อ่านเวอร์ชัน SqlAssist ที่ติดตั้งอยู่ไม่ได้ จึงหยุดการอัปเดต";
+
+                    backup = Path.Combine(Path.GetDirectoryName(InstalledSetupPath), "recovery",
+                        "SqlAssist-" + installedVersion + "-" + Guid.NewGuid().ToString("N") + ".vsix");
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(backup));
+                        // InstalledSetupPath is the cached installer for the currently installed version.
+                        // Load only its metadata/resources; never execute the previous setup.
+                        var previousSetup = Assembly.ReflectionOnlyLoad(File.ReadAllBytes(InstalledSetupPath));
+                        using (var res = previousSetup.GetManifestResourceStream("SqlAssist.vsix"))
+                            CopyPackage(res, backup, installedVersion);
+                        SetupLog.Info("SqlAssist " + installedVersion + " recovery package: " + backup);
+                    }
+                    catch (Exception ex)
+                    {
+                        SetupLog.Error("Preparing VSIX recovery: " + ex.Message);
+                        return "เตรียมไฟล์กู้คืน SqlAssist " + installedVersion + " ไม่สำเร็จ จึงหยุดการอัปเดต: " + ex.Message;
+                    }
+                }
+
+                string error = VsixUpgrade.Replace(vsix, installedVersion, backup,
+                    () =>
+                    {
+                        progress?.Report(new Step(2, total, "ถอน SqlAssist ที่ติดตั้งอยู่"));
+                        return RunInstaller(ide, "/quiet /uninstall:" + VsixId);
+                    },
+                    package =>
+                    {
+                        string action = package == backup ? "กู้คืน SqlAssist " + installedVersion : "ติดตั้ง SqlAssist " + SetupVersion;
+                        progress?.Report(new Step(3, total, action + " ลงใน SSMS"));
+                        return RunInstaller(ide, "/quiet \"" + package + "\"");
+                    },
+                    () => FindInstalledVersion(ide), out keepBackup);
+
                 progress?.Report(new Step(4, total, "ล้าง cache ของ SSMS"));
-                ClearComponentCache();
+                try { ClearComponentCache(); }
+                catch (Exception ex) { SetupLog.Error("Clearing component cache: " + ex.Message); }
+                if (error != null)
+                {
+                    SetupLog.Error("SqlAssist install: " + error);
+                    return error;
+                }
                 RegisterUninstaller(ide);
                 return null;
             }
             finally
             {
-                try { File.Delete(vsix); } catch { /* temp file; Windows cleans it up eventually */ }
+                TryDelete(() => File.Delete(vsix));
+                if (backup != null && !keepBackup) TryDelete(() => File.Delete(backup));
             }
         }
 
-        public static string Uninstall(string ide, IProgress<Step> progress = null)
+        private static void CopyPackage(Stream resource, string path, string version)
+        {
+            if (resource == null) throw new InvalidDataException("ไม่พบ VSIX ในไฟล์ติดตั้ง");
+            using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite))
+            {
+                resource.CopyTo(file);
+                file.Position = 0;
+                using (var archive = new ZipArchive(file, ZipArchiveMode.Read))
+                {
+                    var manifest = archive.GetEntry("extension.vsixmanifest");
+                    if (manifest == null) throw new InvalidDataException("ไม่พบ manifest ใน VSIX");
+                    using (var stream = manifest.Open())
+                    {
+                        var identity = ReadIdentity(XDocument.Load(stream));
+                        if ((string)identity?.Attribute("Id") != VsixId || (string)identity.Attribute("Version") != version)
+                            throw new InvalidDataException("รหัสหรือเวอร์ชันของ VSIX ไม่ตรงกับ SqlAssist " + version);
+                    }
+                }
+            }
+        }
+
+        private static string RunExclusive(Func<string> operation)
+        {
+            using (var mutex = new Mutex(false, @"Local\SqlAssist.Setup.Installation"))
+            {
+                try
+                {
+                    if (!mutex.WaitOne(0)) return "SqlAssist Setup กำลังทำงานในหน้าต่างอื่น";
+                }
+                catch (AbandonedMutexException)
+                {
+                    // The previous setup exited before releasing the lock; this process now owns it.
+                }
+
+                try
+                {
+                    if (RunningSsmsCount() > 0) return "ปิด SSMS ทุกหน้าต่างก่อนติดตั้งหรือถอน SqlAssist";
+                    return operation();
+                }
+                catch (Exception ex)
+                {
+                    SetupLog.Error("SqlAssist Setup: " + ex.Message);
+                    return ex.Message;
+                }
+                finally
+                {
+                    mutex.ReleaseMutex();
+                }
+            }
+        }
+
+        public static string Uninstall(string ide, IProgress<Step> progress = null) =>
+            RunExclusive(() => UninstallCore(ide, progress));
+
+        private static string UninstallCore(string ide, IProgress<Step> progress)
         {
             const int total = 2;
             progress?.Report(new Step(1, total, "ถอน SqlAssist ออกจาก SSMS"));
             int code = RunInstaller(ide, "/quiet /uninstall:" + VsixId);
-            if (code != 0) return InstallerError(code);
+            if (code != 0) return VsixUpgrade.InstallerError(code);
             progress?.Report(new Step(2, total, "ล้าง cache ของ SSMS"));
             ClearComponentCache();
             UnregisterUninstaller();
@@ -242,9 +347,6 @@ namespace SqlAssist.Setup
                 return 0;
             }
         }
-
-        private static string InstallerError(int code) =>
-            $"VSIXInstaller exited with code {code}.\nดูรายละเอียดได้ที่ %TEMP%\\dd_VSIXInstaller_*.log";
 
         // SSMS's own VSIXInstaller: it targets the SSMS instance, where Visual Studio's would not.
         private static int RunInstaller(string ide, string arguments)

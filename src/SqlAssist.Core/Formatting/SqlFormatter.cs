@@ -41,6 +41,10 @@ namespace SqlAssist.Core.Formatting
                     return Fail(sql, "ตรวจพบว่าผลที่จัดแล้วต่างจากต้นฉบับมากกว่าช่องว่าง (" + difference + ") จึงไม่ได้แก้ข้อความ");
                 return new FormatResult(text, null, !string.Equals(text, sql, StringComparison.Ordinal));
             }
+            catch (ItemBuilder.NestingLimitExceededException ex)
+            {
+                return Fail(sql, ex.Message + " จึงไม่ได้แก้ข้อความ");
+            }
             catch (Exception ex)
             {
                 return Fail(sql, "จัดรูปแบบไม่สำเร็จ (" + ex.GetType().Name + ") จึงไม่ได้แก้ข้อความ");

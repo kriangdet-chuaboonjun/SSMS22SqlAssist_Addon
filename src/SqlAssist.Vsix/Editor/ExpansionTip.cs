@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.Composition;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using Microsoft.VisualStudio.Language.Intellisense.AsyncCompletion;
 using Microsoft.VisualStudio.Language.StandardClassification;
@@ -43,6 +44,7 @@ namespace SqlAssist.Editor
         private int _shownAt = -1;
         private string _shownAction;   // the GROUP BY hint also depends on how many expressions it promises
         private int _waitingForSchemaAt = -1;
+        private Task<LocalTableIndex> _waitingForLocals;
 
         public ExpansionTip(IWpfTextView view, IToolTipService toolTips, IAsyncCompletionBroker broker)
         {
@@ -128,7 +130,15 @@ namespace SqlAssist.Editor
                 string action;
                 if (star != null)
                 {
-                    int count = StarExpander.Count(star, schema.WithLocalTables(EditorLocalTables.At(caret)));
+                    var index = EditorLocalTables.GetAsync(caret.Snapshot);
+                    if (index.Status != TaskStatus.RanToCompletion)
+                    {
+                        Hide();
+                        if (!index.IsCompleted && !ReferenceEquals(_waitingForLocals, index))
+                            WaitForLocalsThenRetry(index, caret.Snapshot);
+                        return;
+                    }
+                    int count = StarExpander.Count(star, schema.WithLocalTables(index.GetAwaiter().GetResult().At(caret.Position)));
                     if (count == 0)
                     {
                         Hide();
@@ -189,6 +199,18 @@ namespace SqlAssist.Editor
                 Log.Error("Expansion tip", ex);
                 Hide();
             }
+        }
+
+        private void WaitForLocalsThenRetry(Task<LocalTableIndex> index, ITextSnapshot snapshot)
+        {
+            _waitingForLocals = index;
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                try { await index.ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (!_view.IsClosed && ReferenceEquals(_view.TextSnapshot, snapshot)) Evaluate();
+            }).FileAndForget("SqlAssist/ExpansionTipWaitForLocals");
         }
 
         // First use of a database: the schema is still loading. Check again once it arrives, if the caret stayed put.
